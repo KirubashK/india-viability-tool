@@ -3,11 +3,11 @@
 import React, { useMemo, useCallback, useState } from "react";
 import { useProductStore } from "@/store/productStore";
 import {
-  calculateLandedCost,
+  calculateLandedCostCore,
   calculateUnitEconomics,
   calculateMarketPosition,
   getVerdict,
-} from "@/lib/calculations";
+} from "@/lib/coreCalculations";
 import { KpiCard } from "@/components/KpiCard";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { WaterfallChart } from "@/components/WaterfallChart";
