@@ -47,7 +47,7 @@ export default function ProductAnalysisPage() {
     setTimeout(() => {
       try {
         const landed = calculateLandedCost(valueChain);
-        const ueInputs = { ...unitEconomics, landedCost: landed.totalLandedCost };
+        const ueInputs = { ...unitEconomics, landedCost: landed.landedCost };
         const unitEcon = calculateUnitEconomics(ueInputs);
         const market = competitorPrices.length > 0
           ? calculateMarketPosition({ sellingPrice: product.sellingPrice, competitorPrices })
