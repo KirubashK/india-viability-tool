@@ -20,51 +20,28 @@ import { CATEGORY_DEFAULTS } from "@/data/categories";
 
 // ─── Landed Cost ───────────────────────────────────────────────────────────────
 
+import { calculateLandedCostCore } from "./coreCalculations";
+
 export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult {
-  const rate = EXCHANGE_RATES[inputs.currency] ?? 83.5;
-  const fobInr = inputs.fobPrice * rate;
 
-  const freightInr = inputs.freightCost;
-  const insuranceAmount = (fobInr * inputs.insurancePercent) / 100;
-  const cif = fobInr + freightInr + insuranceAmount;
+  const result = calculateLandedCostCore({
+    costBasis: "FOB",
+    baseCost: inputs.fobPrice,
+    originCosts: 0,
 
-  // Duty rates (with optional manual overrides)
-  let dutyRates: DutyRates = getDutyRates(inputs.hsCode, inputs.countryOfOrigin);
-  if (inputs.bcdOverride !== undefined) dutyRates = { ...dutyRates, bcd: inputs.bcdOverride };
-  if (inputs.swsOverride !== undefined) dutyRates = { ...dutyRates, sws: inputs.swsOverride };
-  if (inputs.igstOverride !== undefined) dutyRates = { ...dutyRates, igst: inputs.igstOverride };
+    freight: inputs.freightCost,
+    insurancePercent: inputs.insurancePercent,
 
-  const { bcdAmount, swsAmount, igstAmount, totalDuty } = calculateDutyAmounts(
-    cif,
-    dutyRates,
-    dutyRates.isPreferential
-  );
-
-  const totalLandedCost = cif + totalDuty;
-  const effectiveDutyRate = (totalDuty / cif) * 100;
-
-  const breakdown: CostBreakdownItem[] = [
-    { label: "FOB Price (INR)", value: fobInr },
-    { label: "Freight Cost", value: freightInr },
-    { label: "Insurance", value: insuranceAmount },
-    { label: "CIF Value", value: cif, isSubtotal: true },
-    { label: `BCD @ ${dutyRates.bcd}%`, value: bcdAmount },
-    { label: `SWS @ ${dutyRates.sws}% of BCD`, value: swsAmount },
-    { label: `IGST @ ${dutyRates.igst}%`, value: igstAmount },
-    { label: "Total Duty", value: totalDuty, isSubtotal: true },
-    { label: "Total Landed Cost", value: totalLandedCost, isTotal: true },
-  ];
+    bcdPercent: inputs.bcdOverride ?? 20,
+    swsPercent: inputs.swsOverride ?? 10,
+    igstPercent: inputs.igstOverride ?? 18,
+  });
 
   return {
-    cif,
-    bcdAmount,
-    swsAmount,
-    igstAmount,
-    totalDuty,
-    totalLandedCost,
-    perUnitLandedCost: totalLandedCost,
-    breakdown,
-    effectiveDutyRate,
+    cif: result.cif,
+    totalDuty: result.totalDuty,
+    landedCost: result.landedCost,
+    breakdown: []
   };
 }
 
