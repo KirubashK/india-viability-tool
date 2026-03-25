@@ -37,13 +37,20 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
     igstPercent: inputs.igstOverride ?? 18,
   });
 
-  return {
-    cif: result.cif,
-    totalDuty: result.totalDuty,
-    landedCost: result.landedCost,
-    breakdown: []
-  };
-}
+return {
+  cif: result.cif,
+  totalDuty: result.totalDuty,
+
+  totalLandedCost: result.landedCost,
+  perUnitLandedCost: result.landedCost,
+
+  bcdAmount: 0,
+  swsAmount: 0,
+  igstAmount: 0,
+  effectiveDutyRate: 0,
+
+  breakdown: []
+};
 
 // ─── Unit Economics ────────────────────────────────────────────────────────────
 
