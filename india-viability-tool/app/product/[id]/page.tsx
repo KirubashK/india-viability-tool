@@ -46,7 +46,7 @@ export default function ProductAnalysisPage() {
     setIsCalculating(true);
     setTimeout(() => {
       try {
-        const landed = calculateLandedCost(valueChain);
+        const landed = calculateLandedCostCore(valueChain);
         const ueInputs = { ...unitEconomics, landedCost: landed.landedCost };
         const unitEcon = calculateUnitEconomics(ueInputs);
         const market = competitorPrices.length > 0
@@ -131,7 +131,7 @@ export default function ProductAnalysisPage() {
         {/* KPI Strip */}
         {hasCalculated && landedCostResult && unitEconomicsResult && verdictResult && (
           <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <KpiCard label="Landed Cost" value={formatInr(landedCostResult.totalLandedCost, true)}
+            <KpiCard label="Landed Cost" value={formatInr(landedCostResult.landedCost, true)}
               subValue={`Duty: ${landedCostResult.effectiveDutyRate.toFixed(1)}% effective`}
               icon={<Package className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Selling Price (MRP)" value={formatInr(product.sellingPrice, true)}
@@ -221,7 +221,7 @@ export default function ProductAnalysisPage() {
                       margin={unitEconomicsResult.margin}
                       breakEven={unitEconomicsResult.breakEvenPrice}
                       sellingPrice={product.sellingPrice}
-                      landedRatio={(landedCostResult.totalLandedCost / product.sellingPrice) * 100}
+                      landedRatio={(landedCostResult.landedCost / product.sellingPrice) * 100}
                       marketingCost={unitEconomicsResult.marketingCost}
                       logisticsCost={unitEconomicsResult.logisticsCost}
                       marketplaceFees={unitEconomicsResult.marketplaceFees}
