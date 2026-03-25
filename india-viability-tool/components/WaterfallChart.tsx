@@ -91,6 +91,8 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] 
 };
 
 export function WaterfallChart({ breakdown, title }: WaterfallChartProps) {
+  console.log("WATERFALL INPUT:", breakdown); // 👈 ADD THIS LINE
+
   const data = buildWaterfallData(breakdown);
 
 
