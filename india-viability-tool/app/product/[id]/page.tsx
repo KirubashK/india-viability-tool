@@ -57,7 +57,7 @@ export default function ProductAnalysisPage() {
         const market = competitorPrices.length > 0
           ? calculateMarketPosition({ sellingPrice: product.sellingPrice, competitorPrices })
           : null;
-        const verdict = getVerdict(unitEcon.margin, market?.position ?? "AT", product.category);
+        const verdict = getVerdict(unitEcon.marginPercent, market?.position ?? "AT", product.category);
         setResults({ landed, unitEcon, market, verdict });
       } catch (e) {
         console.error("Analysis error:", e);
@@ -137,22 +137,22 @@ export default function ProductAnalysisPage() {
         {hasCalculated && landedCostResult && unitEconomicsResult && verdictResult && (
           <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
             <KpiCard label="Landed Cost" value={formatInr(landedCostResult.landedCost, true)}
-              subValue={`Duty: ${landedCostResult.effectiveDutyRate.toFixed(1)}% effective`}
+              subValue={`Duty: ${"—"}% effective`}
               icon={<Package className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Selling Price (MRP)" value={formatInr(product.sellingPrice, true)}
               subValue={`Net rev: ${formatInr(unitEconomicsResult.netRevenue, true)}`}
               icon={<ShoppingBag className="h-4 w-4" />} loading={isCalculating} />
-            <KpiCard label="Net Profit / Unit" value={formatInr(unitEconomicsResult.profit, true)}
-              subValue={`Break-even ₹${unitEconomicsResult.breakEvenPrice.toFixed(0)}`}
-              variant={unitEconomicsResult.profit > 0 ? "success" : "danger"}
-              trend={unitEconomicsResult.profit > 0 ? "up" : "down"}
-              trendLabel={unitEconomicsResult.profit > 0 ? "Profitable" : "Loss-making"}
+            <KpiCard label="Net Profit / Unit" value={formatInr(unitEconomicsResult.netProfit, true)}
+              subValue={`Break-even ₹${"—"}`}
+              variant={unitEconomicsResult.netProfit > 0 ? "success" : "danger"}
+              trend={unitEconomicsResult.netProfit > 0 ? "up" : "down"}
+              trendLabel={unitEconomicsResult.netProfit > 0 ? "Profitable" : "Loss-making"}
               icon={<DollarSign className="h-4 w-4" />} loading={isCalculating} />
-            <KpiCard label="Margin %" value={formatPercent(unitEconomicsResult.margin)}
+            <KpiCard label="Margin %" value={formatPercent(unitEconomicsResult.marginPercent)}
               subValue={`Score: ${verdictResult.score}/100`}
-              variant={unitEconomicsResult.margin >= 30 ? "success" : unitEconomicsResult.margin >= 15 ? "warning" : "danger"}
-              trend={unitEconomicsResult.margin >= 25 ? "up" : unitEconomicsResult.margin >= 10 ? "neutral" : "down"}
-              trendLabel={unitEconomicsResult.margin >= 30 ? "Strong" : unitEconomicsResult.margin >= 15 ? "Acceptable" : "Needs work"}
+              variant={unitEconomicsResult.marginPercent >= 30 ? "success" : unitEconomicsResult.marginPercent >= 15 ? "warning" : "danger"}
+              trend={unitEconomicsResult.marginPercent >= 25 ? "up" : unitEconomicsResult.marginPercent >= 10 ? "neutral" : "down"}
+              trendLabel={unitEconomicsResult.marginPercent >= 30 ? "Strong" : unitEconomicsResult.marginPercent >= 15 ? "Acceptable" : "Needs work"}
               icon={<Percent className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Verdict" value={verdictResult.verdict.replace("_", "-")}
               subValue={`${verdictResult.position.toLowerCase()} market`}
@@ -223,8 +223,8 @@ export default function ProductAnalysisPage() {
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                   <ResultCard title="Margin & Cost Structure" icon={Percent}>
                     <MarginPanel
-                      margin={unitEconomicsResult.margin}
-                      breakEven={unitEconomicsResult.breakEvenPrice}
+                      margin={unitEconomicsResult.marginPercent}
+                      breakEven={0}
                       sellingPrice={product.sellingPrice}
                       landedRatio={(landedCostResult.landedCost / product.sellingPrice) * 100}
                       marketingCost={unitEconomicsResult.marketingCost}
@@ -360,7 +360,7 @@ function MarginPanel({ margin, breakEven, sellingPrice, landedRatio, marketingCo
         </div>
         <div className="mt-1 flex justify-between text-xs text-slate-400">
           <span>0%</span>
-          <span>Break-even: ₹{breakEven.toFixed(0)}</span>
+          <span>Break-even: ₹{breakEven?.toFixed?.(0) ?? "-"}</span>
           <span>50%</span>
         </div>
       </div>
@@ -389,7 +389,7 @@ function MarginPanel({ margin, breakEven, sellingPrice, landedRatio, marketingCo
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: "MRP", value: formatInr(sellingPrice, true) },
-          { label: "Break-Even", value: `₹${breakEven.toFixed(0)}` },
+          { label: "Break-Even", value: `₹${breakEven?.toFixed?.(0) ?? "-"}` },
           { label: "Headroom", value: formatInr(Math.max(0, sellingPrice - breakEven), true) },
           { label: "Landed Ratio", value: `${landedRatio.toFixed(1)}%` },
         ].map(({ label, value }) => (
