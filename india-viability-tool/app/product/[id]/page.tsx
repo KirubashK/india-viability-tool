@@ -2,12 +2,17 @@
 
 import React, { useMemo, useCallback, useState } from "react";
 import { useProductStore } from "@/store/productStore";
+// ✅ Core calculations
 import {
   calculateLandedCostCore,
   calculateUnitEconomics,
+} from "@/lib/coreCalculations";
+
+// ✅ Other logic (unchanged file)
+import {
   calculateMarketPosition,
   getVerdict,
-} from "@/lib/coreCalculations";
+} from "@/lib/calculations";
 import { KpiCard } from "@/components/KpiCard";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { WaterfallChart } from "@/components/WaterfallChart";
