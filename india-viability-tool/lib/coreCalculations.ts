@@ -52,7 +52,7 @@ const percent = (value: number, pct: number) => {
 
 // ===== LANDED COST =====
 
-export function calculateLandedCost(input: LandedCostInput): LandedCostOutput {
+export function calculateLandedCostCore(input: LandedCostInput): LandedCostOutput {
   const baseCost = safe(input.baseCost);
   const originCosts = safe(input.originCosts);
   const freight = safe(input.freight);
