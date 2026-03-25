@@ -15,8 +15,20 @@ export interface LandedCostInput {
 
 export interface LandedCostOutput {
   cif: number;
+
+  bcd: number;
+  sws: number;
+  igst: number;
+
   totalDuty: number;
   landedCost: number;
+
+  breakdown: {
+    label: string;
+    value: number;
+    isSubtotal?: boolean;
+    isTotal?: boolean;
+  }[];
 }
 
 export interface UnitEconomicsInput {
@@ -70,15 +82,31 @@ export function calculateLandedCostCore(input: LandedCostInput): LandedCostOutpu
   const sws = percent(bcd, input.swsPercent);
   const igst = percent(cif + bcd + sws, input.igstPercent);
 
-  const totalDuty = bcd + sws + igst;
+const totalDuty = bcd + sws + igst;
+const landedCost = cif + totalDuty;
 
-  const landedCost = cif + totalDuty;
+return {
+  cif,
+  bcd,
+  sws,
+  igst,
+  totalDuty,
+  landedCost,
 
-  return {
-    cif,
-    totalDuty,
-    landedCost,
-  };
+  breakdown: [
+    { label: "Base Cost", value: adjustedBase },
+    { label: "Freight", value: freight },
+    { label: "Insurance", value: insurance },
+    { label: "CIF Value", value: cif, isSubtotal: true },
+
+    { label: `BCD (${input.bcdPercent}%)`, value: bcd },
+    { label: `SWS (${input.swsPercent}%)`, value: sws },
+    { label: `IGST (${input.igstPercent}%)`, value: igst },
+
+    { label: "Total Duty", value: totalDuty, isSubtotal: true },
+    { label: "Total Landed Cost", value: landedCost, isTotal: true },
+  ],
+};
 }
 
 // ===== UNIT ECONOMICS =====
