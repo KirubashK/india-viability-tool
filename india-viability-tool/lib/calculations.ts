@@ -80,24 +80,62 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
   const marketingCost = calculateMarketingCost(sellingPrice, marketingPercent);
 
   // Costs
-  const totalCosts = landedCost + commissionAmount + closingFee + paymentFeeAmount + logisticsCost + marketingCost;
-  const profit = netAfterFees - landedCost - logisticsCost - marketingCost;
-  const margin = (profit / sellingPrice) * 100;
+const safe = (v: number) => (v === undefined || isNaN(v) ? 0 : v);
+  
+const safeRevenue = safe(netAfterFees);
+const safeLanded = safe(landedCost);
+const safeCommission = safe(commissionAmount);
+const safeClosing = safe(closingFee);
+const safePayment = safe(paymentFeeAmount);
+const safeLogistics = safe(logisticsCost);
+const safeMarketing = safe(marketingCost);
+
+const totalCosts =
+  safeLanded +
+  safeCommission +
+  safeClosing +
+  safePayment +
+  safeLogistics +
+  safeMarketing;
+
+const profit =
+  safeRevenue -
+  safeLanded -
+  safeCommission -
+  safeClosing -
+  safePayment -
+  safeLogistics -
+  safeMarketing;
+
+const margin =
+  sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0;
 
   // Break-even: find price at which margin = 0
   // profit = price/(1+gst) * (1 - commission%) - closingFee - paymentFee% * price/(1+gst) - landedCost - logistics - marketing%*price
   // Simplified linear approximation:
-  const totalVariableCostRate = (effectiveCommission.commissionPercent + effectiveCommission.paymentFeePercent + marketingPercent) / 100;
-  const fixedCosts = landedCost + logisticsCost + closingFee;
-  const breakEvenPrice = fixedCosts / (1 - totalVariableCostRate - (gstAmount / sellingPrice));
+  const totalVariableCostRate =
+  (safe(effectiveCommission.commissionPercent) +
+   safe(effectiveCommission.paymentFeePercent) +
+   safe(marketingPercent)) / 100;
+  const fixedCosts =
+  safe(landedCost) +
+  safe(logisticsCost) +
+  safe(closingFee);
+  const safeSellingPrice = safe(sellingPrice);
+  const safeGstRatio = safeSellingPrice > 0 ? gstAmount / safeSellingPrice : 0;
+
+  const denominator = 1 - totalVariableCostRate - safeGstRatio;
+
+  const breakEvenPrice =
+    denominator > 0 ? fixedCosts / denominator : 0;
 
   const breakdown: CostBreakdownItem[] = [
     { label: "MRP / Selling Price", value: sellingPrice },
     { label: `GST Deducted (${category === "FOOD" ? "5" : category === "APPAREL" ? "12" : "18"}%)`, value: -gstAmount },
     { label: "Net Revenue (ex-GST)", value: netRevenuePre, isSubtotal: true },
-    { label: `Marketplace Commission (${effectiveCommission.commissionPercent}%)`, value: -commissionAmount },
+    { label: `Marketplace Commission (${safe(effectiveCommission.commissionPercent)}%)`, value: -commissionAmount },
     { label: "Closing Fee", value: -closingFee },
-    { label: `Payment Gateway (${effectiveCommission.paymentFeePercent}%)`, value: -paymentFeeAmount },
+    { label: `Payment Gateway (${safe(effectiveCommission.paymentFeePercent)}%)`, value: -paymentFeeAmount },
     { label: "Landed Cost", value: -landedCost },
     { label: "Last-Mile Logistics", value: -logistics.forwardCost },
     { label: `Return Logistics (${returnRate}% return rate)`, value: -logistics.returnCost },
@@ -108,7 +146,7 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
   return {
     sellingPrice,
     gst: gstAmount,
-    netRevenue: netAfterFees,
+    netRevenue: safeRevenue,
     landedCost,
     marketplaceFees: totalDeduction,
     marketingCost,
