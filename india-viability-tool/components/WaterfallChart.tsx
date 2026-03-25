@@ -114,6 +114,7 @@ export function WaterfallChart({ breakdown, title }: WaterfallChartProps) {
             interval={0}
           />
           <YAxis
+            domain={["dataMin - 500", "dataMax + 500"]}
             tickFormatter={(v) =>
               v >= 1000
                 ? `₹${(v / 1000).toFixed(0)}k`
@@ -122,7 +123,7 @@ export function WaterfallChart({ breakdown, title }: WaterfallChartProps) {
             tick={{ fontSize: 10, fill: "#94a3b8" }}
           />
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#e2e8f0" />
+          <ReferenceLine y={0} stroke="#000" strokeWidth={1.5} />
           {/* Invisible base bar for stacking */}
           <Bar dataKey="base" stackId="stack" fill="transparent" />
           <Bar dataKey="value" stackId="stack" radius={[4, 4, 0, 0]}>
