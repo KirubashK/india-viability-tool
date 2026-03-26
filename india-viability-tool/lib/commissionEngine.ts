@@ -9,27 +9,7 @@ export function getMarketplaceFees(
   marketplace: Marketplace,
   category: Category
 ): MarketplaceFees {
-  const marketplaceData = MARKETPLACE_FEES[marketplace];
-
-  if (!marketplaceData) {
-    return {
-      commissionPercent: 20,
-      paymentFeePercent: 2,
-      closingFee: 0,
-    };
-  }
-
-  const categoryFees = marketplaceData[category];
-
-  if (!categoryFees) {
-    return {
-      commissionPercent: 20,
-      paymentFeePercent: 2,
-      closingFee: 0,
-    };
-  }
-
-  return categoryFees;
+  return MARKETPLACE_FEES[marketplace][category];
 }
 
 /**
@@ -45,15 +25,9 @@ export function calculateMarketplaceDeduction(
   totalDeduction: number;
   netAfterFees: number;
 } {
-  const safe = (v: number) => (isNaN(v) ? 0 : v);
-
-  const commissionPercent = safe(fees.commissionPercent);
-  const paymentFeePercent = safe(fees.paymentFeePercent);
-  const closingFee = safe(fees.closingFee);
-
-  const commissionAmount = (sellingPrice * commissionPercent) / 100;
-  const paymentFeeAmount = (sellingPrice * paymentFeePercent) / 100;
-
+  const commissionAmount = (sellingPrice * fees.commissionPercent) / 100;
+  const paymentFeeAmount = (sellingPrice * fees.paymentFeePercent) / 100;
+  const closingFee = fees.closingFee;
   const totalDeduction = commissionAmount + paymentFeeAmount + closingFee;
   const netAfterFees = sellingPrice - totalDeduction;
 
@@ -73,6 +47,5 @@ export function calculateMarketingCost(
   sellingPrice: number,
   marketingPercent: number
 ): number {
-const safe = (v: number) => (v === undefined || isNaN(v) ? 0 : v);
-return (safe(sellingPrice) * safe(marketingPercent)) / 100;
+  return (sellingPrice * marketingPercent) / 100;
 }

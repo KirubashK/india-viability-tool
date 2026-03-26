@@ -1,4 +1,5 @@
 export type FreightMode = "AIR" | "SEA";
+export type CostType = "FOB" | "EXW";
 export type Marketplace = "AMAZON" | "NYKAA" | "MYNTRA" | "FLIPKART" | "MEESHO";
 export type Category = "BEAUTY" | "FOOD" | "APPAREL" | "FMCG" | "PET_CARE" | "ELECTRONICS" | "HOME";
 export type Currency = "USD" | "EUR" | "GBP" | "AUD" | "JPY" | "CNY";
@@ -27,18 +28,28 @@ export interface ProductMaster {
 }
 
 export interface ValueChainInputs {
-  fobPrice: number;
+  // Cost basis
+  costType: CostType;
+  baseCost: number;           // the raw input cost (FOB or EXW, in foreign currency)
   currency: Currency;
   exchangeRate: number;
+  // Product physical attributes (drive freight calculation)
+  weight: number;             // kg per unit
+  dimensions: ProductDimensions;
+  // Freight
   freightMode: FreightMode;
-  freightCost: number;
+  freightOverride?: number;   // manual per-unit INR override — skips engine
+  // Insurance
   insurancePercent: number;
+  // HS / origin
   hsCode: string;
   countryOfOrigin: string;
-  // Manual overrides
+  // Duty manual overrides
   bcdOverride?: number;
   swsOverride?: number;
   igstOverride?: number;
+  // Legacy field kept for backward compat — populated by engine or override
+  freightCost: number;
 }
 
 export interface UnitEconomicsInputs {

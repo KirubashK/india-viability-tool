@@ -29,46 +29,60 @@ interface WaterfallDataPoint {
   displayValue: number;
 }
 
+// Safely coerce a value to a finite number, defaulting to 0.
+// Prevents NaN / Infinity from crashing the chart.
+function safeNumber(v: number | undefined | null): number {
+  if (v === undefined || v === null || !isFinite(v) || isNaN(v)) return 0;
+  return v;
+}
+
 function buildWaterfallData(breakdown: CostBreakdownItem[]): WaterfallDataPoint[] {
   let running = 0;
   return breakdown.map((item) => {
-    const isPositive = item.value >= 0;
+    const rawValue = safeNumber(item.value);
+    const isPositive = rawValue >= 0;
     const isTotal = !!item.isTotal;
     const isSubtotal = !!item.isSubtotal;
 
     if (isTotal || isSubtotal) {
-      const base = 0;
       const result: WaterfallDataPoint = {
         name: item.label,
-        value: Math.abs(item.value),
-        base,
+        value: Math.abs(rawValue),
+        base: 0,
         fill: isTotal ? "#1e293b" : "#475569",
         isTotal,
         isSubtotal,
-        displayValue: item.value,
+        displayValue: rawValue,
       };
-      running = item.value;
+      running = rawValue;
       return result;
     }
 
-    const base = isPositive ? running : running + item.value;
+    const base = isPositive ? running : running + rawValue;
     const result: WaterfallDataPoint = {
       name: item.label,
-      value: Math.abs(item.value),
+      value: Math.abs(rawValue),
       base,
       fill: isPositive ? "#10b981" : "#f43f5e",
       isTotal: false,
       isSubtotal: false,
-      displayValue: item.value,
+      displayValue: rawValue,
     };
-    running += item.value;
+    running += rawValue;
     return result;
   });
 }
 
-const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+const CustomTooltip = ({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: any[];
+}) => {
   if (active && payload && payload.length) {
-    const data = payload[0]?.payload as WaterfallDataPoint;
+    const data = payload[0]?.payload as WaterfallDataPoint | undefined;
+    if (!data) return null;
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
         <p className="text-xs font-semibold text-slate-600">{data.name}</p>
@@ -90,11 +104,24 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] 
   return null;
 };
 
+// Safe Y-axis formatter — guards against non-numeric tick values
+function yTickFormatter(v: number): string {
+  if (typeof v !== "number" || !isFinite(v)) return "—";
+  if (Math.abs(v) >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+  return `₹${v.toFixed(0)}`;
+}
+
 export function WaterfallChart({ breakdown, title }: WaterfallChartProps) {
-  console.log("WATERFALL INPUT:", breakdown); // 👈 ADD THIS LINE
+  // Guard: render placeholder if breakdown is missing or empty
+  if (!breakdown || breakdown.length === 0) {
+    return (
+      <div className="flex h-[320px] items-center justify-center text-sm text-slate-400">
+        No data to display
+      </div>
+    );
+  }
 
   const data = buildWaterfallData(breakdown);
-
 
   return (
     <div className="w-full">
@@ -115,16 +142,13 @@ export function WaterfallChart({ breakdown, title }: WaterfallChartProps) {
           />
           <YAxis
             domain={["dataMin - 500", "dataMax + 500"]}
-            tickFormatter={(v) =>
-              v >= 1000
-                ? `₹${(v / 1000).toFixed(0)}k`
-                : `₹${v.toFixed(0)}`
-            }
+            tickFormatter={yTickFormatter}
             tick={{ fontSize: 10, fill: "#94a3b8" }}
           />
           <Tooltip content={<CustomTooltip />} />
+          {/* Bold zero-line makes positive/negative bars immediately readable */}
           <ReferenceLine y={0} stroke="#000" strokeWidth={1.5} />
-          {/* Invisible base bar for stacking */}
+          {/* Invisible base bar for waterfall stacking */}
           <Bar dataKey="base" stackId="stack" fill="transparent" />
           <Bar dataKey="value" stackId="stack" radius={[4, 4, 0, 0]}>
             {data.map((entry, index) => (

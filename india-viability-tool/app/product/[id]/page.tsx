@@ -2,14 +2,9 @@
 
 import React, { useMemo, useCallback, useState } from "react";
 import { useProductStore } from "@/store/productStore";
-// ✅ Core calculations
 import {
-  calculateLandedCostCore,
+  calculateLandedCost,
   calculateUnitEconomics,
-} from "@/lib/coreCalculations";
-
-// ✅ Other logic (unchanged file)
-import {
   calculateMarketPosition,
   getVerdict,
 } from "@/lib/calculations";
@@ -27,15 +22,17 @@ import { SensitivityAnalysis } from "@/components/SensitivityAnalysis";
 import { MarketPositionChart } from "@/components/MarketPositionChart";
 import { exportToExcel } from "@/lib/exportUtils";
 import { formatInr, formatPercent } from "@/lib/utils";
+import { BulkUpload } from "@/components/BulkUpload";
+import { SaveAnalysisButton } from "@/components/SaveAnalysisButton";
 import {
   Package, TrendingUp, DollarSign, Percent, BarChart2,
   Download, RefreshCw, ChevronRight, Layers, ShoppingBag,
-  Target, BookOpen, Activity, GitCompare, Home,
+  Target, BookOpen, Activity, GitCompare, Home, Upload, FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-type ActiveTab = "analysis" | "sensitivity" | "scenarios";
+type ActiveTab = "analysis" | "sensitivity" | "scenarios" | "bulk";
 
 export default function ProductAnalysisPage() {
   const {
@@ -51,8 +48,8 @@ export default function ProductAnalysisPage() {
     setIsCalculating(true);
     setTimeout(() => {
       try {
-        const landed = calculateLandedCostCore(valueChain);
-        const ueInputs = { ...unitEconomics, landedCost: landed.landedCost };
+        const landed = calculateLandedCost(valueChain);
+        const ueInputs = { ...unitEconomics, landedCost: landed.totalLandedCost };
         const unitEcon = calculateUnitEconomics(ueInputs);
         const market = competitorPrices.length > 0
           ? calculateMarketPosition({ sellingPrice: product.sellingPrice, competitorPrices })
@@ -83,6 +80,7 @@ export default function ProductAnalysisPage() {
     { id: "analysis", label: "Analysis", icon: BarChart2 },
     { id: "sensitivity", label: "Sensitivity", icon: Activity },
     { id: "scenarios", label: "Scenarios", icon: GitCompare },
+    { id: "bulk", label: "Bulk", icon: Upload },
   ];
 
   return (
@@ -117,6 +115,12 @@ export default function ProductAnalysisPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/portfolio"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Portfolio
+            </Link>
+            <SaveAnalysisButton />
             {hasCalculated && (
               <button onClick={handleExport}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
@@ -136,14 +140,14 @@ export default function ProductAnalysisPage() {
         {/* KPI Strip */}
         {hasCalculated && landedCostResult && unitEconomicsResult && verdictResult && (
           <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <KpiCard label="Landed Cost" value={formatInr(landedCostResult.landedCost, true)}
-              subValue={`Duty: ${"—"}% effective`}
+            <KpiCard label="Landed Cost" value={formatInr(landedCostResult.totalLandedCost, true)}
+              subValue={`Duty: ${landedCostResult.effectiveDutyRate.toFixed(1)}% effective`}
               icon={<Package className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Selling Price (MRP)" value={formatInr(product.sellingPrice, true)}
               subValue={`Net rev: ${formatInr(unitEconomicsResult.netRevenue, true)}`}
               icon={<ShoppingBag className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Net Profit / Unit" value={formatInr(unitEconomicsResult.netProfit, true)}
-              subValue={`Break-even ₹${"—"}`}
+              subValue={unitEconomicsResult.breakEvenPrice != null ? `Break-even ₹${unitEconomicsResult.breakEvenPrice.toFixed(0)}` : "Break-even: N/A"}
               variant={unitEconomicsResult.netProfit > 0 ? "success" : "danger"}
               trend={unitEconomicsResult.netProfit > 0 ? "up" : "down"}
               trendLabel={unitEconomicsResult.netProfit > 0 ? "Profitable" : "Loss-making"}
@@ -223,10 +227,10 @@ export default function ProductAnalysisPage() {
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                   <ResultCard title="Margin & Cost Structure" icon={Percent}>
                     <MarginPanel
-                      margin={unitEconomicsResult.marginPercent}
-                      breakEven={0}
+                      marginPercent={unitEconomicsResult.marginPercent}
+                      breakEven={unitEconomicsResult.breakEvenPrice}
                       sellingPrice={product.sellingPrice}
-                      landedRatio={(landedCostResult.landedCost / product.sellingPrice) * 100}
+                      landedRatio={(landedCostResult.totalLandedCost / product.sellingPrice) * 100}
                       marketingCost={unitEconomicsResult.marketingCost}
                       logisticsCost={unitEconomicsResult.logisticsCost}
                       marketplaceFees={unitEconomicsResult.marketplaceFees}
@@ -289,6 +293,15 @@ export default function ProductAnalysisPage() {
             </ResultCard>
           </section>
         )}
+
+        {/* ── TAB: BULK ──────────────────────────────────────────────────── */}
+        {activeTab === "bulk" && (
+          <section>
+            <ResultCard title="Bulk SKU Analysis" subtitle="Upload an Excel file to screen up to 50 products at once" icon={Upload}>
+              <BulkUpload />
+            </ResultCard>
+          </section>
+        )}
       </main>
 
       {compareOpen && <ScenarioCompareModal onClose={() => setCompareOpen(false)} />}
@@ -331,36 +344,44 @@ function ResultCard({ title, subtitle, icon: Icon, children }: { title: string; 
 }
 
 interface MarginPanelProps {
-  margin: number; breakEven: number; sellingPrice: number;
-  landedRatio: number; marketingCost: number; logisticsCost: number; marketplaceFees: number;
+  marginPercent: number;
+  breakEven: number | null;
+  sellingPrice: number;
+  landedRatio: number;
+  marketingCost: number;
+  logisticsCost: number;
+  marketplaceFees: number;
 }
 
-function MarginPanel({ margin, breakEven, sellingPrice, landedRatio, marketingCost, logisticsCost, marketplaceFees }: MarginPanelProps) {
-  const clamped = Math.max(0, Math.min(100, margin));
-  const gaugeColor = margin >= 30 ? "#10b981" : margin >= 15 ? "#f59e0b" : "#f43f5e";
-  const textColor = margin >= 30 ? "text-emerald-600" : margin >= 15 ? "text-amber-500" : "text-red-500";
+function MarginPanel({ marginPercent, breakEven, sellingPrice, landedRatio, marketingCost, logisticsCost, marketplaceFees }: MarginPanelProps) {
+  const clamped = Math.max(0, Math.min(100, marginPercent));
+  const gaugeColor = marginPercent >= 30 ? "#10b981" : marginPercent >= 15 ? "#f59e0b" : "#f43f5e";
+  const textColor = marginPercent >= 30 ? "text-emerald-600" : marginPercent >= 15 ? "text-amber-500" : "text-red-500";
 
   const pieces = [
     { label: "Landed", pct: landedRatio, color: "#6366f1" },
     { label: "Mkt. Fees", pct: (marketplaceFees / sellingPrice) * 100, color: "#8b5cf6" },
     { label: "Logistics", pct: (logisticsCost / sellingPrice) * 100, color: "#ec4899" },
     { label: "Marketing", pct: (marketingCost / sellingPrice) * 100, color: "#f59e0b" },
-    { label: "Profit", pct: Math.max(0, margin), color: "#10b981" },
+    { label: "Profit", pct: Math.max(0, marginPercent), color: "#10b981" },
   ];
+
+  const breakEvenDisplay = breakEven != null ? `₹${breakEven.toFixed(0)}` : "N/A";
+  const headroomDisplay = breakEven != null ? formatInr(Math.max(0, sellingPrice - breakEven), true) : "N/A";
 
   return (
     <div className="space-y-5">
       <div>
         <div className="mb-1.5 flex items-end justify-between">
           <p className="text-xs text-slate-400">Net Margin</p>
-          <p className={cn("font-mono text-3xl font-black", textColor)}>{margin.toFixed(1)}%</p>
+          <p className={cn("font-mono text-3xl font-black", textColor)}>{marginPercent.toFixed(1)}%</p>
         </div>
         <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${clamped}%`, backgroundColor: gaugeColor }} />
         </div>
         <div className="mt-1 flex justify-between text-xs text-slate-400">
           <span>0%</span>
-          <span>Break-even: ₹{breakEven?.toFixed?.(0) ?? "-"}</span>
+          <span>Break-even: {breakEvenDisplay}</span>
           <span>50%</span>
         </div>
       </div>
@@ -389,8 +410,8 @@ function MarginPanel({ margin, breakEven, sellingPrice, landedRatio, marketingCo
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: "MRP", value: formatInr(sellingPrice, true) },
-          { label: "Break-Even", value: `₹${breakEven?.toFixed?.(0) ?? "-"}` },
-          { label: "Headroom", value: formatInr(Math.max(0, sellingPrice - breakEven), true) },
+          { label: "Break-Even", value: breakEvenDisplay },
+          { label: "Headroom", value: headroomDisplay },
           { label: "Landed Ratio", value: `${landedRatio.toFixed(1)}%` },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-lg bg-slate-50 p-3">

@@ -1,101 +1,134 @@
-import { FreightMode, ProductDimensions } from "@/types/product";
+import { FreightMode, ProductDimensions, Category } from "@/types/product";
+import { FreightEngineResult } from "@/types/calculation";
 
-interface FreightEstimateResult {
-  freightCost: number;
-  transitDays: number;
-  mode: FreightMode;
-  notes: string;
+// ─── SEA FREIGHT (FCL MODEL) ───────────────────────────────────────────────────
+
+const SEA_CONTAINER_COSTS_USD: Record<string, number> = {
+  CHN: 2400, KOR: 2600, JPN: 2600,
+  ARE: 1800, MRU: 1800,
+  GBR: 3500, DEU: 3500, FRA: 3500, ITA: 3500, NLD: 3500, ESP: 3500, CHE: 3500,
+  USA: 4500, CAN: 4500,
+  AUS: 3200, NZL: 3200,
+  SGP: 2200, MYS: 2300, THA: 2400, VNM: 2400, IDN: 2500,
+};
+
+const DEFAULT_SEA_COST_USD = 3000;
+const USABLE_CBM = 29;
+const PORT_CLEARANCE_INR = 20000;
+
+export function getSeaContainerCostUsd(countryCode: string): number {
+  return SEA_CONTAINER_COSTS_USD[countryCode] ?? DEFAULT_SEA_COST_USD;
 }
 
-/**
- * Estimates import freight cost based on weight, mode, and origin.
- * Returns cost in INR per shipment.
- */
-export function estimateImportFreight(
-  weightKg: number,
-  mode: FreightMode,
-  countryOfOrigin: string
-): FreightEstimateResult {
-  // Simplified zone-based pricing
-  const isLongHaul = ["USA", "GBR", "DEU", "FRA", "ITA", "CAN", "AUS", "NZL"].includes(
-    countryOfOrigin
-  );
-  const isMidHaul = ["CHN", "JPN", "KOR", "SGP"].includes(countryOfOrigin);
+// ─── AIR FREIGHT ──────────────────────────────────────────────────────────────
 
-  if (mode === "AIR") {
-    const ratePerKg = isLongHaul ? 850 : isMidHaul ? 600 : 450;
-    const minimumCharge = isLongHaul ? 8500 : 5000;
-    const freightCost = Math.max(weightKg * ratePerKg, minimumCharge);
+const AIR_RATES_INR_PER_KG: Record<string, number> = {
+  CHN: 240, KOR: 280, JPN: 280, SGP: 260, MYS: 270, THA: 270, VNM: 280, IDN: 290,
+  ARE: 320, MRU: 320,
+  GBR: 400, DEU: 400, FRA: 400, ITA: 400, NLD: 400, ESP: 400, CHE: 420,
+  AUS: 420, NZL: 440,
+  USA: 450, CAN: 450,
+};
+
+const DEFAULT_AIR_RATE_INR = 300;
+const AIR_HANDLING_INR = 30;
+
+export function getAirRateInr(countryCode: string): number {
+  return AIR_RATES_INR_PER_KG[countryCode] ?? DEFAULT_AIR_RATE_INR;
+}
+
+// ─── VOLUMETRIC HELPERS ───────────────────────────────────────────────────────
+
+export function getAirVolumetricWeight(dims: ProductDimensions): number {
+  return (dims.length * dims.width * dims.height) / 5000;
+}
+
+export function getVolumePerUnitCbm(dims: ProductDimensions): number {
+  return (dims.length * dims.width * dims.height) / 1_000_000;
+}
+
+// ─── MAIN ENGINE ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns per-unit import freight cost in INR.
+ * Uses FCL sea model or volumetric air model.
+ * If overrideInr is provided, all math is skipped.
+ */
+export function getImportFreightPerUnit(
+  mode: FreightMode,
+  countryCode: string,
+  weight: number,
+  dims: ProductDimensions,
+  usdToInrRate: number,
+  overrideInr?: number
+): FreightEngineResult {
+  if (overrideInr !== undefined && overrideInr >= 0) {
+    return { freightPerUnit: overrideInr, mode, isOverridden: true, tooltip: "Manual override applied" };
+  }
+
+  if (mode === "SEA") {
+    const containerCostInr = getSeaContainerCostUsd(countryCode) * usdToInrRate;
+    const volumePerUnit = getVolumePerUnitCbm(dims);
+    const unitsPerContainer = volumePerUnit > 0 ? Math.floor(USABLE_CBM / volumePerUnit) : 1000;
+    const safe = Math.max(unitsPerContainer, 1);
+    const portClearancePerUnit = PORT_CLEARANCE_INR / safe;
+    const freightPerUnit = containerCostInr / safe + portClearancePerUnit;
     return {
-      freightCost,
-      transitDays: isLongHaul ? 5 : 3,
-      mode: "AIR",
-      notes: "Air freight — faster transit, higher cost per kg",
-    };
-  } else {
-    const ratePerKg = isLongHaul ? 85 : isMidHaul ? 60 : 45;
-    const minimumCharge = isLongHaul ? 35000 : 20000;
-    const freightCost = Math.max(weightKg * ratePerKg, minimumCharge);
-    return {
-      freightCost,
-      transitDays: isLongHaul ? 35 : isMidHaul ? 25 : 20,
-      mode: "SEA",
-      notes: "Sea freight — economical for bulk, longer transit",
+      freightPerUnit, mode: "SEA",
+      unitsPerContainer, containerCost: containerCostInr, portClearancePerUnit,
+      isOverridden: false, tooltip: "Based on 20ft FCL container utilisation",
     };
   }
+
+  // AIR
+  const rate = getAirRateInr(countryCode);
+  const volumetricWeight = getAirVolumetricWeight(dims);
+  const chargeableWeight = Math.max(weight, volumetricWeight);
+  const freightPerUnit = chargeableWeight * rate + AIR_HANDLING_INR;
+  return {
+    freightPerUnit, mode: "AIR",
+    volumetricWeight, chargeableWeight, ratePerKg: rate, handlingPerUnit: AIR_HANDLING_INR,
+    isOverridden: false, tooltip: "Based on volumetric / actual chargeable weight",
+  };
 }
 
-/**
- * Calculates volumetric weight.
- * Standard: L x W x H (cm) / 5000 for air, /1000000 for sea (CBM x 1000)
- */
-export function getVolumetricWeight(
-  dimensions: ProductDimensions,
-  mode: FreightMode
-): number {
-  const volume = dimensions.length * dimensions.width * dimensions.height; // cm³
-  if (mode === "AIR") return volume / 5000;
-  // Sea: convert to CBM (÷1000000) then multiply by 1000 kg/CBM
-  return volume / 1000;
+// ─── CATEGORY DEFAULT MODE ────────────────────────────────────────────────────
+
+const CATEGORY_DEFAULT_MODE: Record<Category, FreightMode> = {
+  BEAUTY: "AIR", FOOD: "AIR", APPAREL: "AIR",
+  FMCG: "SEA", PET_CARE: "SEA",
+  ELECTRONICS: "AIR", HOME: "SEA",
+};
+
+export function getDefaultFreightMode(category: Category): FreightMode {
+  return CATEGORY_DEFAULT_MODE[category];
 }
 
-/**
- * Returns chargeable weight (higher of actual vs volumetric).
- */
-export function getChargeableWeight(
-  actualWeight: number,
-  dimensions: ProductDimensions,
-  mode: FreightMode
-): number {
-  const volWeight = getVolumetricWeight(dimensions, mode);
-  return Math.max(actualWeight, volWeight);
-}
+// ─── LAST-MILE (domestic delivery — unchanged) ────────────────────────────────
 
-interface LastMileResult {
+export interface LastMileResult {
   forwardCost: number;
   returnCost: number;
   netLogisticsCost: number;
 }
 
-/**
- * Calculates last-mile logistics cost per unit.
- * Based on weight slab and zone (simplified).
- */
-export function calculateLastMileLogistics(
-  weightKg: number,
-  returnRate: number // as percentage
-): LastMileResult {
-  // Weight-based slabs (INR)
+export function calculateLastMileLogistics(weightKg: number, returnRate: number): LastMileResult {
   let forwardCost: number;
   if (weightKg <= 0.5) forwardCost = 45;
   else if (weightKg <= 1) forwardCost = 60;
   else if (weightKg <= 2) forwardCost = 80;
   else if (weightKg <= 5) forwardCost = 120;
   else forwardCost = 120 + (weightKg - 5) * 20;
-
-  // Return logistics is typically 1.5x forward
   const returnCost = forwardCost * 1.5 * (returnRate / 100);
-  const netLogisticsCost = forwardCost + returnCost;
+  return { forwardCost, returnCost, netLogisticsCost: forwardCost + returnCost };
+}
 
-  return { forwardCost, returnCost, netLogisticsCost };
+// ─── LEGACY COMPAT ────────────────────────────────────────────────────────────
+
+export function getVolumetricWeight(dims: ProductDimensions, mode: FreightMode): number {
+  return mode === "AIR" ? getAirVolumetricWeight(dims) : getVolumePerUnitCbm(dims) * 1000;
+}
+
+export function getChargeableWeight(actual: number, dims: ProductDimensions, mode: FreightMode): number {
+  return Math.max(actual, getVolumetricWeight(dims, mode));
 }

@@ -1,62 +1,76 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import React, { useEffect, useState, useMemo } from "react";
+import { useForm } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
-import { ValueChainInputs, FreightMode, Currency } from "@/types/product";
+import { ValueChainInputs, CostType, Currency } from "@/types/product";
 import { getDutyRates } from "@/lib/dutyEngine";
+import { getImportFreightPerUnit } from "@/lib/logisticsEngine";
 import { COUNTRIES, HS_CODES } from "@/data/hsCodes";
 import { EXCHANGE_RATES } from "@/data/benchmarks";
-import { Info, RotateCcw, ChevronDown } from "lucide-react";
+import { Info, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "AUD", "JPY", "CNY"];
-const FREIGHT_MODES: { value: FreightMode; label: string }[] = [
-  { value: "AIR", label: "✈️ Air Freight (3-7 days)" },
-  { value: "SEA", label: "🚢 Sea Freight (20-40 days)" },
-];
 
-interface FormRow {
-  label: string;
-  children: React.ReactNode;
-  tooltip?: string;
+const inputCls =
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all";
+const selectCls = cn(inputCls, "appearance-none cursor-pointer pr-7");
+
+function Label({ text, tooltip }: { text: string; tooltip?: string }) {
+  return (
+    <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+      {text}
+      {tooltip && (
+        <span title={tooltip}>
+          <Info className="h-3 w-3 text-slate-400" />
+        </span>
+      )}
+    </label>
+  );
 }
 
-function FormRow({ label, children, tooltip }: FormRow) {
+function Field({ label, tooltip, children }: { label: string; tooltip?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-        {label}
-        {tooltip && (
-          <span title={tooltip}>
-            <Info className="h-3 w-3 text-slate-400" />
-          </span>
-        )}
-      </label>
+      <Label text={label} tooltip={tooltip} />
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all";
-const selectCls = cn(inputCls, "appearance-none cursor-pointer");
+function SelectWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
+    </div>
+  );
+}
 
 export function ValueChainForm() {
-  const { valueChain, setValueChain, setProduct, product, resetOverrides } = useProductStore();
-  const { register, control, watch, setValue, reset } = useForm<ValueChainInputs>({
+  const { valueChain, setValueChain, product, resetOverrides } = useProductStore();
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showFreightOverride, setShowFreightOverride] = useState(false);
+
+  const { register, watch, setValue } = useForm<ValueChainInputs>({
     defaultValues: valueChain,
   });
 
-  const watchedHs = watch("hsCode");
-  const watchedCountry = watch("countryOfOrigin");
-  const watchedCurrency = watch("currency");
-  const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
-
-  // Sync form → store on every change
   const formValues = watch();
+  const watchedCurrency = watch("currency");
+  const watchedCountry = watch("countryOfOrigin");
+  const watchedHs = watch("hsCode");
+  const watchedMode = watch("freightMode");
+  const watchedCostType = watch("costType");
+  const watchedWeight = watch("weight");
+  const watchedDims = watch("dimensions");
+
+  // Sync form → store (debounced)
   useEffect(() => {
-    const sub = setTimeout(() => setValueChain(formValues), 100);
-    return () => clearTimeout(sub);
+    const t = setTimeout(() => setValueChain(formValues), 120);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(formValues)]);
 
   // Update exchange rate when currency changes
@@ -64,148 +78,264 @@ export function ValueChainForm() {
     if (watchedCurrency) {
       setValue("exchangeRate", EXCHANGE_RATES[watchedCurrency] ?? 83.5);
     }
-  }, [watchedCurrency]);
+  }, [watchedCurrency, setValue]);
 
-  const fobInr = (watch("fobPrice") ?? 0) * (watch("exchangeRate") ?? 83.5);
+  // Auto-computed freight from engine
+  const freightPreview = useMemo(() => {
+    const dims = watchedDims ?? { length: 10, width: 8, height: 5 };
+    const w = Number(watchedWeight) || 0.3;
+    const usdRate = EXCHANGE_RATES["USD"] ?? 83.5;
+    return getImportFreightPerUnit(
+      watchedMode ?? "AIR",
+      watchedCountry ?? "USA",
+      w,
+      dims,
+      usdRate,
+      undefined // no override yet — just for preview
+    );
+  }, [watchedMode, watchedCountry, watchedWeight, watchedDims]);
+
+  const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
+  const baseCostInr = (Number(watch("baseCost")) || 0) * (EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">
-          Value Chain / Landed Cost
+          Value Chain & Landed Cost
         </h3>
         <button
-          onClick={() => resetOverrides()}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+          type="button"
+          onClick={() => { resetOverrides(); setShowFreightOverride(false); }}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 transition-colors"
         >
           <RotateCcw className="h-3 w-3" />
-          Reset Overrides
+          Reset
         </button>
       </div>
 
-      {/* FOB Price + Currency */}
-      <div className="grid grid-cols-2 gap-4">
-        <FormRow label="FOB Price" tooltip="Ex-works or FOB price per unit">
-          <div className="flex gap-2">
-            <div className="relative w-28 shrink-0">
-              <select
-                {...register("currency")}
-                className={cn(selectCls, "pr-6")}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <input
-              type="number"
-              step="0.01"
-              {...register("fobPrice", { valueAsNumber: true, min: 0 })}
-              className={inputCls}
-              placeholder="0.00"
-            />
-          </div>
-          <p className="text-xs text-slate-400">
-            ≈ ₹{fobInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} @ ₹
-            {watch("exchangeRate")?.toFixed(1)}/{watch("currency")}
+      {/* Cost Type toggle */}
+      <Field label="Cost Basis">
+        <div className="flex gap-2">
+          {(["FOB", "EXW"] as CostType[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setValue("costType", t)}
+              className={cn(
+                "flex-1 rounded-lg border py-2 text-sm font-semibold transition-all",
+                formValues.costType === t
+                  ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {watchedCostType === "EXW" && (
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-md px-2 py-1.5 leading-relaxed">
+            Origin costs (inland transport, export docs) will be added automatically based on country.
           </p>
-        </FormRow>
+        )}
+      </Field>
 
-        <FormRow label="Exchange Rate" tooltip="₹ per 1 unit of foreign currency">
-          <input
-            type="number"
-            step="0.01"
-            {...register("exchangeRate", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </FormRow>
-      </div>
-
-      {/* Freight */}
-      <div className="grid grid-cols-2 gap-4">
-        <FormRow label="Freight Mode">
-          <div className="relative">
-            <select {...register("freightMode")} className={cn(selectCls, "pr-6")}>
-              {FREIGHT_MODES.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
+      {/* Currency + Cost */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Currency">
+          <SelectWrap>
+            <select {...register("currency")} className={selectCls}>
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
-          </div>
-        </FormRow>
-
-        <FormRow label="Freight Cost (₹)" tooltip="Total freight cost for this shipment in INR">
-          <input
-            type="number"
-            {...register("freightCost", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </FormRow>
+          </SelectWrap>
+        </Field>
+        <Field
+          label={watchedCostType === "EXW" ? "EXW Cost / unit" : "FOB Cost / unit"}
+          tooltip={watchedCostType === "EXW" ? "Ex-works price — origin costs added automatically" : "FOB price per unit"}
+        >
+          <input type="number" step="0.01" min="0" {...register("baseCost", { valueAsNumber: true })} className={inputCls} placeholder="0.00" />
+        </Field>
       </div>
+      <p className="text-xs text-slate-400">≈ ₹{Math.round(baseCostInr).toLocaleString("en-IN")} @ ₹{(EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5).toFixed(1)}/{watchedCurrency}</p>
 
-      <div className="grid grid-cols-2 gap-4">
-        <FormRow label="Insurance (%)" tooltip="Insurance as % of FOB value">
-          <input
-            type="number"
-            step="0.1"
-            {...register("insurancePercent", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </FormRow>
-
-        <FormRow label="Country of Origin">
-          <div className="relative">
-            <select {...register("countryOfOrigin")} className={cn(selectCls, "pr-6")}>
+      {/* Country + HS */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Country of Origin">
+          <SelectWrap>
+            <select {...register("countryOfOrigin")} className={selectCls}>
               {Object.entries(COUNTRIES).map(([code, name]) => (
                 <option key={code} value={code}>{name}</option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
-          </div>
+          </SelectWrap>
           {autoRates.isPreferential && (
-            <p className="text-xs text-emerald-600 font-medium">
-              ✓ FTA available — preferential duty may apply
-            </p>
+            <p className="text-xs text-emerald-600 font-medium">✓ FTA — preferential duty applies</p>
           )}
-        </FormRow>
+        </Field>
+        <Field label="HS Code">
+          <SelectWrap>
+            <select {...register("hsCode")} className={selectCls}>
+              {HS_CODES.map((h) => (
+                <option key={h.code} value={h.code}>{h.code} — {h.description.slice(0, 26)}</option>
+              ))}
+            </select>
+          </SelectWrap>
+        </Field>
       </div>
 
-      {/* HS Code */}
-      <FormRow label="HS Code (4-digit)">
-        <div className="relative">
-          <select {...register("hsCode")} className={cn(selectCls, "pr-6")}>
-            {HS_CODES.map((h) => (
-              <option key={h.code} value={h.code}>
-                {h.code} — {h.description}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
-        </div>
-      </FormRow>
+      {/* Dimensions + Weight */}
+      <div className="grid grid-cols-4 gap-2">
+        <Field label="L (cm)">
+          <input type="number" min="0" {...register("dimensions.length", { valueAsNumber: true })} className={inputCls} />
+        </Field>
+        <Field label="W (cm)">
+          <input type="number" min="0" {...register("dimensions.width", { valueAsNumber: true })} className={inputCls} />
+        </Field>
+        <Field label="H (cm)">
+          <input type="number" min="0" {...register("dimensions.height", { valueAsNumber: true })} className={inputCls} />
+        </Field>
+        <Field label="Wt (kg)">
+          <input type="number" step="0.05" min="0" {...register("weight", { valueAsNumber: true })} className={inputCls} />
+        </Field>
+      </div>
 
-      {/* Auto-fetched duty rates + overrides */}
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Duty Rates — Auto-detected (override if needed)
+      {/* Freight Mode + computed preview */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <Label text="Shipping Mode" />
+          <div className="flex gap-1.5">
+            {(["AIR", "SEA"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setValue("freightMode", m)}
+                className={cn(
+                  "rounded-md px-3 py-1 text-xs font-semibold transition-all",
+                  formValues.freightMode === m
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"
+                )}
+              >
+                {m === "AIR" ? "✈ AIR" : "🚢 SEA"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Auto-calculated freight display */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-500">Freight per unit</p>
+            <p className="text-base font-bold text-slate-800">
+              ₹{Math.round(freightPreview.freightPerUnit).toLocaleString("en-IN")}
+            </p>
+          </div>
+          <span
+            title={freightPreview.tooltip}
+            className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-500 cursor-help"
+          >
+            {watchedMode === "SEA" ? "FCL model" : "Vol. weight"} ⓘ
+          </span>
+        </div>
+
+        {/* Advanced toggle */}
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+        >
+          <ChevronRight className={cn("h-3 w-3 transition-transform", showAdvanced && "rotate-90")} />
+          {showAdvanced ? "Hide" : "Show"} breakdown
+        </button>
+
+        {showAdvanced && (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {watchedMode === "SEA" && freightPreview.unitsPerContainer !== undefined && (
+              <>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Units / container</p>
+                  <p className="font-semibold text-slate-700">{freightPreview.unitsPerContainer?.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Container cost</p>
+                  <p className="font-semibold text-slate-700">₹{Math.round(freightPreview.containerCost ?? 0).toLocaleString("en-IN")}</p>
+                </div>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Port clearance / unit</p>
+                  <p className="font-semibold text-slate-700">₹{Math.round(freightPreview.portClearancePerUnit ?? 0)}</p>
+                </div>
+              </>
+            )}
+            {watchedMode === "AIR" && freightPreview.volumetricWeight !== undefined && (
+              <>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Volumetric weight</p>
+                  <p className="font-semibold text-slate-700">{freightPreview.volumetricWeight?.toFixed(3)} kg</p>
+                </div>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Chargeable weight</p>
+                  <p className="font-semibold text-slate-700">{freightPreview.chargeableWeight?.toFixed(3)} kg</p>
+                </div>
+                <div className="bg-white rounded-lg p-2 text-xs">
+                  <p className="text-slate-400">Rate / kg</p>
+                  <p className="font-semibold text-slate-700">₹{freightPreview.ratePerKg}</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Override toggle */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowFreightOverride(!showFreightOverride);
+            if (showFreightOverride) setValue("freightOverride", undefined);
+          }}
+          className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2"
+        >
+          {showFreightOverride ? "Remove override" : "Override freight"}
+        </button>
+
+        {showFreightOverride && (
+          <Field label="Manual freight per unit (₹)">
+            <input
+              type="number"
+              min="0"
+              {...register("freightOverride", { valueAsNumber: true })}
+              className={inputCls}
+              placeholder="Enter INR amount"
+            />
+          </Field>
+        )}
+      </div>
+
+      <Field label="Insurance (%)" tooltip="Insurance as % of FOB value">
+        <input type="number" step="0.1" min="0" {...register("insurancePercent", { valueAsNumber: true })} className={inputCls} />
+      </Field>
+
+      {/* Duty overrides */}
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Duty Rates — auto-detected · override if needed
         </p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           {[
             { label: "BCD (%)", field: "bcdOverride" as const, auto: autoRates.bcd },
-            { label: "SWS (% of BCD)", field: "swsOverride" as const, auto: autoRates.sws },
+            { label: "SWS (%)", field: "swsOverride" as const, auto: autoRates.sws },
             { label: "IGST (%)", field: "igstOverride" as const, auto: autoRates.igst },
           ].map(({ label, field, auto }) => (
-            <FormRow key={field} label={label}>
+            <Field key={field} label={label}>
               <input
                 type="number"
                 step="0.5"
+                min="0"
                 placeholder={String(auto)}
                 {...register(field, { valueAsNumber: true })}
                 className={cn(inputCls, "placeholder:text-slate-400")}
               />
               <p className="text-xs text-slate-400">Auto: {auto}%</p>
-            </FormRow>
+            </Field>
           ))}
         </div>
       </div>

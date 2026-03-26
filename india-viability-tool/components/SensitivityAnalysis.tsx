@@ -16,7 +16,7 @@ import { calculateLandedCost, calculateUnitEconomics } from "@/lib/calculations"
 import { useProductStore } from "@/store/productStore";
 import { cn } from "@/lib/utils";
 
-type SensitivityAxis = "sellingPrice" | "fobPrice" | "marketingPercent" | "freightCost";
+type SensitivityAxis = "sellingPrice" | "baseCost" | "marketingPercent" | "freightOverride";
 
 interface SensitivityAnalysisProps {
   axis: SensitivityAxis;
@@ -30,32 +30,35 @@ const AXIS_CONFIG: Record<SensitivityAxis, {
   format: (v: number) => string;
 }> = {
   sellingPrice: { label: "Selling Price (MRP ₹)", unit: "₹", steps: 11, range: 40, format: (v) => `₹${v.toLocaleString("en-IN")}` },
-  fobPrice: { label: "FOB Price", unit: "", steps: 11, range: 40, format: (v) => `${v.toFixed(2)}` },
+  baseCost: { label: "Base Cost", unit: "", steps: 11, range: 40, format: (v) => `${v.toFixed(2)}` },
   marketingPercent: { label: "Marketing %", unit: "%", steps: 11, range: 80, format: (v) => `${v.toFixed(1)}%` },
-  freightCost: { label: "Freight Cost (₹)", unit: "₹", steps: 11, range: 60, format: (v) => `₹${(v / 1000).toFixed(0)}k` },
+  freightOverride: { label: "Freight / unit (₹)", unit: "₹", steps: 11, range: 60, format: (v) => `₹${Math.round(v)}` },
 };
 
 export function SensitivityAnalysis() {
-  const { valueChain, unitEconomics, product } = useProductStore();
+  const { valueChain, unitEconomics, product, landedCostResult } = useProductStore();
   const [axis, setAxis] = React.useState<SensitivityAxis>("sellingPrice");
 
   const cfg = AXIS_CONFIG[axis];
 
   const chartData = useMemo(() => {
+    // Use auto-computed freight as base for the freightOverride axis
+    // Use last computed freight as base, or a sensible fallback
+    const autoFreight = landedCostResult?.freightPerUnit ?? 120;
     const base = axis === "sellingPrice" ? product.sellingPrice
-      : axis === "fobPrice" ? valueChain.fobPrice
+      : axis === "baseCost" ? (valueChain.baseCost ?? 10)
       : axis === "marketingPercent" ? unitEconomics.marketingPercent
-      : valueChain.freightCost;
+      : autoFreight;
 
     return Array.from({ length: cfg.steps }, (_, i) => {
       const factor = 1 - cfg.range / 100 + (i * 2 * cfg.range) / 100 / (cfg.steps - 1);
-      const value = base * factor;
+      const value = Math.max(0.01, base * factor);
 
       try {
-        const vc = axis === "fobPrice"
-          ? { ...valueChain, fobPrice: value }
-          : axis === "freightCost"
-          ? { ...valueChain, freightCost: value }
+        const vc = axis === "baseCost"
+          ? { ...valueChain, baseCost: value }
+          : axis === "freightOverride"
+          ? { ...valueChain, freightOverride: value }
           : valueChain;
 
         const landed = calculateLandedCost(vc);
@@ -71,9 +74,9 @@ export function SensitivityAnalysis() {
         return {
           xLabel: cfg.format(value),
           xValue: value,
-          margin: parseFloat(result.margin.toFixed(2)),
-          profit: parseFloat(result.profit.toFixed(0)),
-          breakEven: parseFloat(result.breakEvenPrice.toFixed(0)),
+          margin: parseFloat(result.marginPercent.toFixed(2)),
+          profit: parseFloat(result.netProfit.toFixed(0)),
+          breakEven: result.breakEvenPrice != null ? parseFloat(result.breakEvenPrice.toFixed(0)) : 0,
           isBase: Math.abs(factor - 1) < 0.001,
         };
       } catch {

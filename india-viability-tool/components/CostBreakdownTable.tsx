@@ -10,11 +10,11 @@ interface CostBreakdownTableProps {
 }
 
 function formatInr(value: number): string {
-  if (value < 0) {
-    return `(₹${Math.abs(value).toLocaleString("en-IN")})`;
-  }
-
-  return `₹${value.toLocaleString("en-IN")}`;
+  return value.toLocaleString("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  });
 }
 
 export function CostBreakdownTable({ items, title }: CostBreakdownTableProps) {

@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
-import { ProductMaster, Category } from "@/types/product";
+import { ProductMaster, Category, Marketplace } from "@/types/product";
 import { CATEGORIES, CATEGORY_LABELS } from "@/data/categories";
 import { COUNTRIES, HS_CODES } from "@/data/hsCodes";
 import { ChevronDown } from "lucide-react";
@@ -103,15 +103,6 @@ export function ProductMasterForm() {
           </div>
         </Field>
 
-        <Field label="Weight (kg)">
-          <input
-            type="number"
-            step="0.05"
-            {...register("weight", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </Field>
-
         <Field label="Selling Price (₹ MRP)">
           <input
             type="number"
@@ -119,29 +110,16 @@ export function ProductMasterForm() {
             className={inputCls}
           />
         </Field>
-      </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Length (cm)">
-          <input
-            type="number"
-            {...register("dimensions.length", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Width (cm)">
-          <input
-            type="number"
-            {...register("dimensions.width", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Height (cm)">
-          <input
-            type="number"
-            {...register("dimensions.height", { valueAsNumber: true })}
-            className={inputCls}
-          />
+        <Field label="Marketplace">
+          <div className="relative">
+            <select {...register("marketplace")} className={selectCls}>
+              {(["AMAZON","NYKAA","MYNTRA","FLIPKART","MEESHO"] as const).map((m) => (
+                <option key={m} value={m}>{m.charAt(0) + m.slice(1).toLowerCase().replace("_"," ")}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          </div>
         </Field>
       </div>
     </div>

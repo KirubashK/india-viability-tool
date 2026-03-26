@@ -104,7 +104,7 @@ export function ScenarioTable({ onOpenCompare }: ScenarioTableProps) {
           </span>
         ),
       }),
-      col.accessor((row) => row.unitEconomics.margin, {
+      col.accessor((row) => row.unitEconomics.marginPercent, {
         id: "margin",
         header: "Margin %",
         cell: (info) => {

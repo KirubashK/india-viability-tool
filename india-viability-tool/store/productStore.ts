@@ -1,38 +1,25 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import {
-  ProductMaster,
-  ValueChainInputs,
-  UnitEconomicsInputs,
-  Category,
-  Marketplace,
-  Currency,
-  FreightMode,
+  ProductMaster, ValueChainInputs, UnitEconomicsInputs,
+  Category, Marketplace, Currency,
 } from "@/types/product";
 import {
-  LandedCostResult,
-  UnitEconomicsResult,
-  MarketPositionResult,
-  VerdictResult,
+  LandedCostResult, UnitEconomicsResult, MarketPositionResult, VerdictResult,
 } from "@/types/calculation";
 import { CATEGORY_DEFAULTS } from "@/data/categories";
 import { EXCHANGE_RATES } from "@/data/benchmarks";
+import { getDefaultFreightMode } from "@/lib/logisticsEngine";
 
 interface ProductState {
-  // Product master
   product: ProductMaster;
-  // Value chain inputs
   valueChain: ValueChainInputs;
-  // Unit economics inputs
   unitEconomics: UnitEconomicsInputs;
-  // Competitor prices
   competitorPrices: number[];
-  // Computed results (null until calculated)
   landedCostResult: LandedCostResult | null;
   unitEconomicsResult: UnitEconomicsResult | null;
   marketPositionResult: MarketPositionResult | null;
   verdictResult: VerdictResult | null;
-  // UI state
   isCalculating: boolean;
   hasCalculated: boolean;
 }
@@ -70,14 +57,17 @@ const defaultProduct: ProductMaster = {
 };
 
 const defaultValueChain: ValueChainInputs = {
-  fobPrice: 10,
+  costType: "FOB",
+  baseCost: 10,
   currency: "USD",
   exchangeRate: EXCHANGE_RATES["USD"],
-  freightMode: "AIR",
-  freightCost: 5000,
+  weight: 0.3,
+  dimensions: { length: 10, width: 8, height: 5 },
+  freightMode: getDefaultFreightMode("BEAUTY"),
   insurancePercent: 0.5,
   hsCode: "3304",
   countryOfOrigin: "USA",
+  freightCost: 0, // populated by engine
 };
 
 const defaultUnitEcon = (category: Category): UnitEconomicsInputs => {
@@ -110,8 +100,7 @@ export const useProductStore = create<ProductState & ProductActions>()(
     setProduct: (updates) =>
       set((state) => {
         Object.assign(state.product, updates);
-        // Sync relevant fields to value chain and unit econ
-        if (updates.fobPrice !== undefined) state.valueChain.fobPrice = updates.fobPrice;
+        if (updates.fobPrice !== undefined) state.valueChain.baseCost = updates.fobPrice;
         if (updates.currency !== undefined) {
           state.valueChain.currency = updates.currency;
           state.valueChain.exchangeRate = EXCHANGE_RATES[updates.currency] ?? 83.5;
@@ -119,8 +108,14 @@ export const useProductStore = create<ProductState & ProductActions>()(
         if (updates.hsCode !== undefined) state.valueChain.hsCode = updates.hsCode;
         if (updates.countryOfOrigin !== undefined) state.valueChain.countryOfOrigin = updates.countryOfOrigin;
         if (updates.sellingPrice !== undefined) state.unitEconomics.sellingPrice = updates.sellingPrice;
-        if (updates.weight !== undefined) state.unitEconomics.weight = updates.weight;
-        if (updates.dimensions !== undefined) state.unitEconomics.dimensions = updates.dimensions;
+        if (updates.weight !== undefined) {
+          state.valueChain.weight = updates.weight;
+          state.unitEconomics.weight = updates.weight;
+        }
+        if (updates.dimensions !== undefined) {
+          state.valueChain.dimensions = updates.dimensions;
+          state.unitEconomics.dimensions = updates.dimensions;
+        }
       }),
 
     setCategory: (category) =>
@@ -130,6 +125,8 @@ export const useProductStore = create<ProductState & ProductActions>()(
         state.unitEconomics.category = category;
         state.unitEconomics.marketingPercent = defaults.marketingPercent;
         state.unitEconomics.returnRate = defaults.returnRate;
+        // Auto-set default freight mode for this category
+        state.valueChain.freightMode = getDefaultFreightMode(category);
       }),
 
     setMarketplace: (marketplace) =>
@@ -141,11 +138,13 @@ export const useProductStore = create<ProductState & ProductActions>()(
     setValueChain: (updates) =>
       set((state) => {
         Object.assign(state.valueChain, updates);
-        if (updates.fobPrice !== undefined) state.product.fobPrice = updates.fobPrice;
+        if (updates.baseCost !== undefined) state.product.fobPrice = updates.baseCost;
         if (updates.currency !== undefined) {
           state.product.currency = updates.currency;
           state.valueChain.exchangeRate = EXCHANGE_RATES[updates.currency] ?? 83.5;
         }
+        if (updates.weight !== undefined) state.unitEconomics.weight = updates.weight;
+        if (updates.dimensions !== undefined) state.unitEconomics.dimensions = updates.dimensions;
       }),
 
     setUnitEconomics: (updates) =>
@@ -155,9 +154,7 @@ export const useProductStore = create<ProductState & ProductActions>()(
       }),
 
     setCompetitorPrices: (prices) =>
-      set((state) => {
-        state.competitorPrices = prices;
-      }),
+      set((state) => { state.competitorPrices = prices; }),
 
     setResults: ({ landed, unitEcon, market, verdict }) =>
       set((state) => {
@@ -167,20 +164,18 @@ export const useProductStore = create<ProductState & ProductActions>()(
         state.verdictResult = verdict;
         state.hasCalculated = true;
         state.isCalculating = false;
-        // Propagate landed cost to unit econ
         state.unitEconomics.landedCost = landed.totalLandedCost;
       }),
 
     setIsCalculating: (v) =>
-      set((state) => {
-        state.isCalculating = v;
-      }),
+      set((state) => { state.isCalculating = v; }),
 
     resetOverrides: () =>
       set((state) => {
         delete state.valueChain.bcdOverride;
         delete state.valueChain.swsOverride;
         delete state.valueChain.igstOverride;
+        delete state.valueChain.freightOverride;
         delete state.unitEconomics.commissionOverride;
         delete state.unitEconomics.logisticsOverride;
       }),

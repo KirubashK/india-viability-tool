@@ -61,11 +61,11 @@ export function RecommendationsPanel({
   }
 
   // Margin gap
-  if (verdict.margin < benchmark.successfulMarginFloor) {
+  if (verdict.marginPercent < benchmark.successfulMarginFloor) {
     dynamicRecs.push({
       icon: Percent,
       title: "Margin Below Viability Floor",
-      detail: `Current margin ${verdict.margin.toFixed(1)}% is below the ${benchmark.successfulMarginFloor}% floor for ${category} category. Re-negotiate FOB or increase selling price.`,
+      detail: `Current margin ${verdict.marginPercent.toFixed(1)}% is below the ${benchmark.successfulMarginFloor}% floor for ${category} category. Re-negotiate FOB or increase selling price.`,
       priority: "high",
     });
   }

@@ -76,24 +76,24 @@ export function ScenarioCompareModal({ onClose }: ScenarioCompareModalProps) {
     {
       label: "Net Profit",
       values: selected.map((s) => ({
-        raw: s.unitEconomics.profit,
-        display: formatInr(s.unitEconomics.profit, true),
+        raw: s.unitEconomics.netProfit,
+        display: formatInr(s.unitEconomics.netProfit, true),
       })),
       higherIsBetter: true,
     },
     {
       label: "Margin %",
       values: selected.map((s) => ({
-        raw: s.unitEconomics.margin,
-        display: `${s.unitEconomics.margin.toFixed(1)}%`,
+        raw: s.unitEconomics.marginPercent,
+        display: `${s.unitEconomics.marginPercent.toFixed(1)}%`,
       })),
       higherIsBetter: true,
     },
     {
       label: "Break-Even Price",
       values: selected.map((s) => ({
-        raw: s.unitEconomics.breakEvenPrice,
-        display: `₹${s.unitEconomics.breakEvenPrice.toFixed(0)}`,
+        raw: s.unitEconomics.breakEvenPrice ?? 0,
+        display: s.unitEconomics.breakEvenPrice != null ? `₹${s.unitEconomics.breakEvenPrice.toFixed(0)}` : "N/A",
       })),
       higherIsBetter: false,
     },
@@ -198,7 +198,7 @@ export function ScenarioCompareModal({ onClose }: ScenarioCompareModalProps) {
                 { label: "Mkt Fees", pct: (s.unitEconomics.marketplaceFees / mrp) * 100, color: "#8b5cf6" },
                 { label: "Logistics", pct: (s.unitEconomics.logisticsCost / mrp) * 100, color: "#ec4899" },
                 { label: "Marketing", pct: (s.unitEconomics.marketingCost / mrp) * 100, color: "#f59e0b" },
-                { label: "Profit", pct: Math.max(0, s.unitEconomics.margin), color: "#10b981" },
+                { label: "Profit", pct: Math.max(0, s.unitEconomics.marginPercent), color: "#10b981" },
               ];
               return (
                 <div key={s.id}>
