@@ -73,12 +73,16 @@ function buildWaterfallData(breakdown: CostBreakdownItem[]): WaterfallDataPoint[
   });
 }
 
+interface TooltipPayloadEntry {
+  payload: WaterfallDataPoint;
+}
+
 const CustomTooltip = ({
   active,
   payload,
 }: {
   active?: boolean;
-  payload?: any[];
+  payload?: TooltipPayloadEntry[];
 }) => {
   if (active && payload && payload.length) {
     const data = payload[0]?.payload as WaterfallDataPoint | undefined;

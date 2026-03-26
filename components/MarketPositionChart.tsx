@@ -19,9 +19,29 @@ interface MarketPositionChartProps {
   result: MarketPositionResult;
 }
 
-const CustomTooltip = ({ active, payload }: any) => {
+interface ScatterPoint {
+  x: number;
+  y: number;
+  price: number;
+  label: string;
+  isOwn: boolean;
+  isMedian?: boolean;
+}
+
+interface MarketTooltipEntry {
+  payload: ScatterPoint;
+}
+
+const CustomTooltip = ({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: MarketTooltipEntry[];
+}) => {
   if (active && payload?.length) {
     const d = payload[0]?.payload;
+    if (!d) return null;
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl text-xs">
         <p className="font-semibold text-slate-700">{d.label}</p>

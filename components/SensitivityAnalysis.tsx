@@ -18,8 +18,11 @@ import { cn } from "@/lib/utils";
 
 type SensitivityAxis = "sellingPrice" | "baseCost" | "marketingPercent" | "freightOverride";
 
-interface SensitivityAnalysisProps {
-  axis: SensitivityAxis;
+interface SensitivityTooltipEntry {
+  dataKey: string;
+  name: string;
+  value: number;
+  color: string;
 }
 
 const AXIS_CONFIG: Record<SensitivityAxis, {
@@ -87,12 +90,20 @@ export function SensitivityAnalysis() {
 
   const basePoint = chartData.find((d) => d.isBase);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: SensitivityTooltipEntry[];
+    label?: string;
+  }) => {
     if (active && payload?.length) {
       return (
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl text-xs">
           <p className="font-semibold text-slate-700 mb-2">{label}</p>
-          {payload.map((p: any) => (
+          {payload.map((p: SensitivityTooltipEntry) => (
             <div key={p.dataKey} className="flex items-center justify-between gap-6">
               <span style={{ color: p.color }}>{p.name}</span>
               <span className="font-mono font-bold" style={{ color: p.color }}>
