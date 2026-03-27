@@ -6,8 +6,10 @@ import { useProductStore } from "@/store/productStore";
 import { ValueChainInputs, CostType, Currency } from "@/types/product";
 import { getDutyRates } from "@/lib/dutyEngine";
 import { getImportFreightPerUnit } from "@/lib/logisticsEngine";
-import { COUNTRIES, HS_CODES } from "@/data/hsCodes";
+import { getOriginCostPercent } from "@/lib/originCostEngine";
+import { COUNTRIES } from "@/data/hsCodes";
 import { EXCHANGE_RATES } from "@/data/benchmarks";
+import { HsCodeSelector } from "@/components/HsCodeSelector";
 import { Info, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +82,14 @@ export function ValueChainForm() {
     }
   }, [watchedCurrency, setValue]);
 
+  // Keep countryOfOrigin in sync with Product Master (user changes country there, not here)
+  useEffect(() => {
+    if (valueChain.countryOfOrigin && valueChain.countryOfOrigin !== watch("countryOfOrigin")) {
+      setValue("countryOfOrigin", valueChain.countryOfOrigin);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueChain.countryOfOrigin]);
+
   // Auto-computed freight from engine
   const freightPreview = useMemo(() => {
     const dims = watchedDims ?? { length: 10, width: 8, height: 5 };
@@ -97,6 +107,7 @@ export function ValueChainForm() {
 
   const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
   const baseCostInr = (Number(watch("baseCost")) || 0) * (EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5);
+  const autoOriginPct = getOriginCostPercent(watchedCountry ?? "USA");
 
   return (
     <div className="space-y-4">
@@ -140,6 +151,27 @@ export function ValueChainForm() {
         )}
       </Field>
 
+      {/* EXW origin cost override — shown only in EXW mode */}
+      {watchedCostType === "EXW" && (
+        <Field
+          label="Origin Cost % override"
+          tooltip="Overrides the auto country-based origin cost. E.g. enter 6 for 6%. Leave blank to use country default."
+        >
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            max="25"
+            placeholder={`Auto (${(autoOriginPct * 100).toFixed(0)}% for ${watch("countryOfOrigin")})`}
+            {...register("originCostOverridePercent", { valueAsNumber: true })}
+            className={cn(inputCls, "placeholder:text-slate-400")}
+          />
+          <p className="text-xs text-slate-400">
+            Country default: {(autoOriginPct * 100).toFixed(0)}% · EXW→FOB adds ₹{Math.round(baseCostInr * autoOriginPct).toLocaleString("en-IN")}
+          </p>
+        </Field>
+      )}
+
       {/* Currency + Cost */}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Currency">
@@ -158,30 +190,33 @@ export function ValueChainForm() {
       </div>
       <p className="text-xs text-slate-400">≈ ₹{Math.round(baseCostInr).toLocaleString("en-IN")} @ ₹{(EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5).toFixed(1)}/{watchedCurrency}</p>
 
-      {/* Country + HS */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Country of Origin">
-          <SelectWrap>
-            <select {...register("countryOfOrigin")} className={selectCls}>
-              {Object.entries(COUNTRIES).map(([code, name]) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
-            </select>
-          </SelectWrap>
-          {autoRates.isPreferential && (
-            <p className="text-xs text-emerald-600 font-medium">✓ FTA — preferential duty applies</p>
-          )}
-        </Field>
-        <Field label="HS Code">
-          <SelectWrap>
-            <select {...register("hsCode")} className={selectCls}>
-              {HS_CODES.map((h) => (
-                <option key={h.code} value={h.code}>{h.code} — {h.description.slice(0, 26)}</option>
-              ))}
-            </select>
-          </SelectWrap>
-        </Field>
+      {/* Editable exchange rate — allows user to override the static FX table */}
+      <Field label="Exchange Rate (₹ per 1 unit)" tooltip="Edit to use live or custom FX rate">
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          {...register("exchangeRate", { valueAsNumber: true })}
+          className={inputCls}
+        />
+      </Field>
+
+      {/* Country + HS — country is set in Product Master and read here for context */}
+      <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+        <span className="text-slate-400">Country of Origin: </span>
+        <span className="font-semibold text-slate-700">{COUNTRIES[watchedCountry ?? ""] ?? watchedCountry ?? "—"}</span>
+        {autoRates.isPreferential && (
+          <span className="ml-2 text-emerald-600 font-medium">✓ FTA — preferential duty applies</span>
+        )}
+        <span className="ml-2 text-slate-400">(set in Product Master)</span>
       </div>
+
+      <Field label="HS Code">
+        <HsCodeSelector
+          value={watch("hsCode") ?? "3304"}
+          onChange={(code) => setValue("hsCode", code)}
+        />
+      </Field>
 
       {/* Dimensions + Weight */}
       <div className="grid grid-cols-4 gap-2">
@@ -234,7 +269,7 @@ export function ValueChainForm() {
             title={freightPreview.tooltip}
             className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-500 cursor-help"
           >
-            {watchedMode === "SEA" ? "FCL model" : "Vol. weight"} ⓘ
+            {watchedMode === "SEA" ? "Vol. ÷6000" : "Vol. ÷5000"} ⓘ
           </span>
         </div>
 
@@ -250,26 +285,32 @@ export function ValueChainForm() {
 
         {showAdvanced && (
           <div className="grid grid-cols-2 gap-2 pt-1">
-            {watchedMode === "SEA" && freightPreview.unitsPerContainer !== undefined && (
+            {watchedMode === "SEA" && (
               <>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Units / container</p>
-                  <p className="font-semibold text-slate-700">{freightPreview.unitsPerContainer?.toLocaleString("en-IN")}</p>
+                  <p className="text-slate-400">Vol. weight (÷6000)</p>
+                  <p className="font-semibold text-slate-700">{(freightPreview.seaVolumetricWeight ?? 0).toFixed(3)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Container cost</p>
-                  <p className="font-semibold text-slate-700">₹{Math.round(freightPreview.containerCost ?? 0).toLocaleString("en-IN")}</p>
+                  <p className="text-slate-400">Chargeable weight</p>
+                  <p className="font-semibold text-slate-700">{(freightPreview.seaChargeableWeight ?? 0).toFixed(3)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Port clearance / unit</p>
-                  <p className="font-semibold text-slate-700">₹{Math.round(freightPreview.portClearancePerUnit ?? 0)}</p>
+                  <p className="text-slate-400">Rate / kg (sea)</p>
+                  <p className="font-semibold text-slate-700">₹{freightPreview.seaRatePerKg ?? 0}</p>
                 </div>
+                {freightPreview.unitsPerContainer !== undefined && (
+                  <div className="bg-white rounded-lg p-2 text-xs">
+                    <p className="text-slate-400">FCL units / container</p>
+                    <p className="font-semibold text-slate-700">{freightPreview.unitsPerContainer.toLocaleString("en-IN")}</p>
+                  </div>
+                )}
               </>
             )}
             {watchedMode === "AIR" && freightPreview.volumetricWeight !== undefined && (
               <>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Volumetric weight</p>
+                  <p className="text-slate-400">Vol. weight (÷5000)</p>
                   <p className="font-semibold text-slate-700">{freightPreview.volumetricWeight?.toFixed(3)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
@@ -277,7 +318,7 @@ export function ValueChainForm() {
                   <p className="font-semibold text-slate-700">{freightPreview.chargeableWeight?.toFixed(3)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Rate / kg</p>
+                  <p className="text-slate-400">Rate / kg (air)</p>
                   <p className="font-semibold text-slate-700">₹{freightPreview.ratePerKg}</p>
                 </div>
               </>

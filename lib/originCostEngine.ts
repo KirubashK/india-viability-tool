@@ -39,11 +39,14 @@ export function getOriginCostPercent(countryCode: string): number {
 /**
  * Converts an EXW base cost (in INR) to FOB by applying the origin cost %.
  * If costType is "FOB", originCost = 0 and fobValueInr = baseCostInr.
+ * If overridePercent is provided (as a percentage, e.g. 6 = 6%), it takes
+ * precedence over the country-based default.
  */
 export function resolveOriginCost(
   baseCostInr: number,
   costType: "FOB" | "EXW",
-  countryCode: string
+  countryCode: string,
+  overridePercent?: number
 ): OriginCostResult {
   if (costType === "FOB") {
     return {
@@ -54,9 +57,13 @@ export function resolveOriginCost(
     };
   }
 
-  const originCostPercent = getOriginCostPercent(countryCode);
+  // Use override if provided (convert from percentage to decimal), else country default
+  const originCostPercent =
+    overridePercent !== undefined && overridePercent >= 0
+      ? overridePercent / 100
+      : getOriginCostPercent(countryCode);
+
   const originCost = baseCostInr * originCostPercent;
-  const fobValueInr = baseCostInr + originCost;
 
   return {
     fobValueInr: baseCostInr + originCost,

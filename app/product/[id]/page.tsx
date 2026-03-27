@@ -143,8 +143,14 @@ export default function ProductAnalysisPage() {
             <KpiCard label="Landed Cost" value={formatInr(landedCostResult.totalLandedCost, true)}
               subValue={`Duty: ${landedCostResult.effectiveDutyRate.toFixed(1)}% effective`}
               icon={<Package className="h-4 w-4" />} loading={isCalculating} />
-            <KpiCard label="Selling Price (MRP)" value={formatInr(product.sellingPrice, true)}
-              subValue={`Net rev: ${formatInr(unitEconomicsResult.netRevenue, true)}`}
+            <KpiCard label="Selling Price (MRP)"
+              value={unitEconomicsResult.recommendedSellingPrice != null
+                ? formatInr(unitEconomicsResult.recommendedSellingPrice, true)
+                : formatInr(unitEconomicsResult.sellingPrice, true)}
+              subValue={unitEconomicsResult.recommendedSellingPrice != null
+                ? `Recommended for target margin`
+                : `Net rev: ${formatInr(unitEconomicsResult.netRevenue, true)}`}
+              variant={unitEconomicsResult.recommendedSellingPrice != null ? "success" : "default"}
               icon={<ShoppingBag className="h-4 w-4" />} loading={isCalculating} />
             <KpiCard label="Net Profit / Unit" value={formatInr(unitEconomicsResult.netProfit, true)}
               subValue={unitEconomicsResult.breakEvenPrice != null ? `Break-even ₹${unitEconomicsResult.breakEvenPrice.toFixed(0)}` : "Break-even: N/A"}

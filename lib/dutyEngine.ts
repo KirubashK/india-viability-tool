@@ -24,9 +24,11 @@ export function getDutyRates(hsCode: string, countryOfOrigin: string): DutyRates
 
   const isPreferential = countryOfOrigin in PREFERENTIAL_COUNTRIES;
 
-  // Preferential BCD: typically 0-5% for FTA countries
-  // This is a simplification — real FTAs have product-specific rates
-  const preferentialBcd = isPreferential ? Math.min(entry.bcd * 0.1, 5) : null;
+  // Preferential BCD under FTAs: India's ECTA/CEPA agreements typically
+  // reduce BCD by 50% in initial years, reaching 0% over the schedule.
+  // Using 50% reduction as a conservative representative rate.
+  // Actual rate depends on specific HS code and FTA schedule year.
+  const preferentialBcd = isPreferential ? entry.bcd * 0.5 : null;
 
   return {
     bcd: entry.bcd,

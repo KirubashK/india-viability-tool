@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
-import { UnitEconomicsInputs, Marketplace } from "@/types/product";
+import { UnitEconomicsInputs, Marketplace, SellingPriceMode } from "@/types/product";
 import { MARKETPLACE_LABELS, MARKETPLACES } from "@/data/marketplaces";
 import { getMarketplaceFees } from "@/lib/commissionEngine";
 import { ChevronDown, Info } from "lucide-react";
@@ -57,22 +57,66 @@ export function UnitEconomicsForm() {
     return () => clearTimeout(t);
   }, [JSON.stringify(allValues)]);
 
+  const watchedMode = watch("sellingPriceMode") as SellingPriceMode;
+
   return (
     <div className="space-y-5">
       <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">
         Unit Economics
       </h3>
 
-      <div className="grid grid-cols-2 gap-4">
-        <FormField label="Selling Price (MRP ₹)" tooltip="Inclusive of GST">
-          <input
-            type="number"
-            {...register("sellingPrice", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </FormField>
+      {/* Selling price mode toggle */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Selling Price</p>
+        <div className="flex gap-2">
+          {([
+            { value: "KNOWN" as SellingPriceMode, label: "I know my price" },
+            { value: "RECOMMEND" as SellingPriceMode, label: "Recommend price" },
+          ]).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setValue("sellingPriceMode", value)}
+              className={cn(
+                "flex-1 rounded-lg border py-2 text-xs font-semibold transition-all",
+                watchedMode === value
+                  ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-        <FormField label="Marketplace">
+        {watchedMode === "KNOWN" || !watchedMode ? (
+          <FormField label="Selling Price (MRP ₹)" tooltip="Inclusive of GST">
+            <input
+              type="number"
+              {...register("sellingPrice", { valueAsNumber: true })}
+              className={inputCls}
+            />
+          </FormField>
+        ) : (
+          <FormField
+            label="Target Margin %"
+            tooltip="Net margin as % of ex-GST revenue. We will calculate the minimum MRP needed."
+            hint="The recommended MRP will appear in results after running the analysis."
+          >
+            <input
+              type="number"
+              step="1"
+              min="1"
+              max="80"
+              {...register("targetMarginPercent", { valueAsNumber: true })}
+              className={inputCls}
+              placeholder="e.g. 30"
+            />
+          </FormField>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
           <div className="relative">
             <select {...register("marketplace")} className={selectCls}>
               {MARKETPLACES.map((m) => (

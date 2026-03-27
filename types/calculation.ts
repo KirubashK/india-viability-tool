@@ -11,11 +11,15 @@ export interface CostBreakdownItem {
 export interface FreightEngineResult {
   freightPerUnit: number;
   mode: FreightMode;
-  // SEA-specific
+  // SEA-specific (chargeable weight model, divisor = 6000)
+  seaVolumetricWeight?: number;
+  seaChargeableWeight?: number;
+  seaRatePerKg?: number;
+  // SEA FCL context (informational only — shown in advanced breakdown)
   unitsPerContainer?: number;
   containerCost?: number;
   portClearancePerUnit?: number;
-  // AIR-specific
+  // AIR-specific (chargeable weight model, divisor = 5000)
   volumetricWeight?: number;
   chargeableWeight?: number;
   ratePerKg?: number;
@@ -60,7 +64,8 @@ export interface MarketplaceFees {
 }
 
 export interface UnitEconomicsResult {
-  sellingPrice: number;
+  sellingPrice: number;           // effective selling price used (may be computed in RECOMMEND mode)
+  recommendedSellingPrice: number | null; // non-null only when mode = RECOMMEND
   gst: number;
   netRevenue: number;
   landedCost: number;

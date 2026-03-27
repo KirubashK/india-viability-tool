@@ -81,6 +81,8 @@ const defaultUnitEcon = (category: Category): UnitEconomicsInputs => {
     landedCost: 0,
     marketingPercent: defaults.marketingPercent,
     returnRate: defaults.returnRate,
+    sellingPriceMode: "KNOWN",
+    targetMarginPercent: 30,
   };
 };
 
@@ -176,6 +178,7 @@ export const useProductStore = create<ProductState & ProductActions>()(
         delete state.valueChain.swsOverride;
         delete state.valueChain.igstOverride;
         delete state.valueChain.freightOverride;
+        delete state.valueChain.originCostOverridePercent;
         delete state.unitEconomics.commissionOverride;
         delete state.unitEconomics.logisticsOverride;
       }),

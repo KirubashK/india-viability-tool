@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
-import { ProductMaster, Category, Marketplace } from "@/types/product";
+import { ProductMaster, Category } from "@/types/product";
 import { CATEGORIES, CATEGORY_LABELS } from "@/data/categories";
 import { COUNTRIES, HS_CODES } from "@/data/hsCodes";
 import { ChevronDown } from "lucide-react";
@@ -44,18 +44,13 @@ export function ProductMasterForm() {
         Product Master
       </h3>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Product Name">
-          <input
-            {...register("productName")}
-            placeholder="e.g. Vitamin C Serum 30ml"
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Brand">
-          <input {...register("brand")} placeholder="e.g. The Ordinary" className={inputCls} />
-        </Field>
-      </div>
+      <Field label="Product Name">
+        <input
+          {...register("productName")}
+          placeholder="e.g. Vitamin C Serum 30ml"
+          className={inputCls}
+        />
+      </Field>
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Category">
@@ -66,22 +61,17 @@ export function ProductMasterForm() {
               className={selectCls}
             >
               {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
-                </option>
+                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
           </div>
         </Field>
-
-        <Field label="HS Code">
+        <Field label="Country of Origin">
           <div className="relative">
-            <select {...register("hsCode")} className={selectCls}>
-              {HS_CODES.map((h) => (
-                <option key={h.code} value={h.code}>
-                  {h.code} — {h.description.slice(0, 30)}
-                </option>
+            <select {...register("countryOfOrigin")} className={selectCls}>
+              {Object.entries(COUNTRIES).map(([code, name]) => (
+                <option key={code} value={code}>{name}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -89,33 +79,17 @@ export function ProductMasterForm() {
         </Field>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Field label="Country of Origin">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Brand">
+          <input {...register("brand")} placeholder="e.g. The Ordinary" className={inputCls} />
+        </Field>
+        <Field label="HS Code">
           <div className="relative">
-            <select {...register("countryOfOrigin")} className={selectCls}>
-              {Object.entries(COUNTRIES).map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
+            <select {...register("hsCode")} className={selectCls}>
+              {HS_CODES.map((h) => (
+                <option key={h.code} value={h.code}>
+                  {h.code} — {h.description.slice(0, 28)}
                 </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />
-          </div>
-        </Field>
-
-        <Field label="Selling Price (₹ MRP)">
-          <input
-            type="number"
-            {...register("sellingPrice", { valueAsNumber: true })}
-            className={inputCls}
-          />
-        </Field>
-
-        <Field label="Marketplace">
-          <div className="relative">
-            <select {...register("marketplace")} className={selectCls}>
-              {(["AMAZON","NYKAA","MYNTRA","FLIPKART","MEESHO"] as const).map((m) => (
-                <option key={m} value={m}>{m.charAt(0) + m.slice(1).toLowerCase().replace("_"," ")}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400" />

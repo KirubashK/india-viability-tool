@@ -1,7 +1,35 @@
 import { FreightMode, ProductDimensions, Category } from "@/types/product";
 import { FreightEngineResult } from "@/types/calculation";
 
-// ─── SEA FREIGHT (FCL MODEL) ───────────────────────────────────────────────────
+// ─── SEA FREIGHT ──────────────────────────────────────────────────────────────
+// Primary model: chargeable weight × per-kg rate (LCL/standard approach)
+// Volumetric weight uses divisor 6000 (IATA/industry standard for sea)
+
+const SEA_RATES_INR_PER_KG: Record<string, number> = {
+  CHN: 28,  KOR: 32,  JPN: 32,
+  SGP: 25,  MYS: 27,  THA: 28,  VNM: 28,  IDN: 30,
+  ARE: 22,  MRU: 22,
+  GBR: 45,  DEU: 45,  FRA: 45,  ITA: 45,  NLD: 45,  ESP: 45,  CHE: 48,
+  AUS: 40,  NZL: 42,
+  USA: 55,  CAN: 55,
+};
+
+const DEFAULT_SEA_RATE_INR = 38;
+const SEA_HANDLING_INR = 40; // port handling per unit (INR)
+
+export function getSeaRateInr(countryCode: string): number {
+  return SEA_RATES_INR_PER_KG[countryCode] ?? DEFAULT_SEA_RATE_INR;
+}
+
+/**
+ * Sea volumetric weight in kg.
+ * Industry standard divisor for sea freight is 6000 (cm³ → kg).
+ */
+export function getSeaVolumetricWeight(dims: ProductDimensions): number {
+  return (dims.length * dims.width * dims.height) / 6000;
+}
+
+// ─── SEA FREIGHT (FCL MODEL — kept for informational breakdown) ───────────────
 
 const SEA_CONTAINER_COSTS_USD: Record<string, number> = {
   CHN: 2400, KOR: 2600, JPN: 2600,
@@ -67,16 +95,24 @@ export function getImportFreightPerUnit(
   }
 
   if (mode === "SEA") {
+    // Primary: chargeable weight model (volumetric ÷ 6000, per-kg rate)
+    const rate = getSeaRateInr(countryCode);
+    const seaVolumetricWeight = getSeaVolumetricWeight(dims);
+    const seaChargeableWeight = Math.max(weight, seaVolumetricWeight);
+    const freightPerUnit = seaChargeableWeight * rate + SEA_HANDLING_INR;
+
+    // FCL context — informational only, shown in advanced breakdown
     const containerCostInr = getSeaContainerCostUsd(countryCode) * usdToInrRate;
     const volumePerUnit = getVolumePerUnitCbm(dims);
     const unitsPerContainer = volumePerUnit > 0 ? Math.floor(USABLE_CBM / volumePerUnit) : 1000;
-    const safe = Math.max(unitsPerContainer, 1);
-    const portClearancePerUnit = PORT_CLEARANCE_INR / safe;
-    const freightPerUnit = containerCostInr / safe + portClearancePerUnit;
+    const portClearancePerUnit = PORT_CLEARANCE_INR / Math.max(unitsPerContainer, 1);
+
     return {
       freightPerUnit, mode: "SEA",
+      seaVolumetricWeight, seaChargeableWeight, seaRatePerKg: rate,
       unitsPerContainer, containerCost: containerCostInr, portClearancePerUnit,
-      isOverridden: false, tooltip: "Based on 20ft FCL container utilisation",
+      isOverridden: false,
+      tooltip: `Chargeable weight ${seaChargeableWeight.toFixed(3)} kg × ₹${rate}/kg (sea)`,
     };
   }
 

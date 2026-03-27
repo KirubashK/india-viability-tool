@@ -17,28 +17,37 @@ import { EXCHANGE_RATES } from "@/data/benchmarks";
 // ─── Landed Cost ───────────────────────────────────────────────────────────────
 
 export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult {
-  const rate = EXCHANGE_RATES[inputs.currency] ?? 83.5;
+  // Use the user-editable exchange rate stored in inputs (ValueChainForm keeps it in sync).
+  // Fall back to the static table only if somehow missing.
+  const rate = inputs.exchangeRate > 0 ? inputs.exchangeRate : (EXCHANGE_RATES[inputs.currency] ?? 83.5);
   const baseCostInr = (inputs.baseCost ?? inputs.fobPrice ?? 0) * rate;
 
   // 1. EXW → FOB conversion
   const originCostResult = resolveOriginCost(
     baseCostInr,
     inputs.costType ?? "FOB",
-    inputs.countryOfOrigin
+    inputs.countryOfOrigin,
+    inputs.originCostOverridePercent
   );
   const fobInr = originCostResult.fobValueInr;
 
   // 2. Import freight per unit (FCL sea or volumetric air)
   const dims = inputs.dimensions ?? { length: 10, width: 8, height: 5 };
   const weight = inputs.weight ?? 0.3;
-  const usdRate = EXCHANGE_RATES["USD"] ?? 83.5;
+  // Use the user's actual exchange rate for container cost conversion.
+  // Sea container costs are in USD, so we need USD→INR specifically.
+  // If the user's currency is USD, use their rate directly. Otherwise fall back
+  // to the stored USD rate. This ensures freight responds to the editable FX input.
+  const usdToInr = inputs.currency === "USD"
+    ? (inputs.exchangeRate ?? EXCHANGE_RATES["USD"] ?? 83.5)
+    : (EXCHANGE_RATES["USD"] ?? 83.5);
 
   const freightEngineResult = getImportFreightPerUnit(
     inputs.freightMode ?? "AIR",
     inputs.countryOfOrigin,
     weight,
     dims,
-    usdRate,
+    usdToInr,
     inputs.freightOverride
   );
   const freightPerUnit = freightEngineResult.freightPerUnit;
@@ -68,6 +77,29 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
 
   const core = calculateLandedCostCore(coreInput);
   const effectiveDutyRate = core.cif > 0 ? (core.totalDuty / core.cif) * 100 : 0;
+
+  // ── Debug trace (remove before production) ──────────────────────────────
+  if (process.env.NODE_ENV === "development") {
+    console.log("[calculateLandedCost]", {
+      currency: inputs.currency,
+      exchangeRate: rate,
+      baseCost: inputs.baseCost ?? inputs.fobPrice,
+      baseCostInr: Math.round(baseCostInr),
+      costType: inputs.costType,
+      originCostPercent: (originCostResult.originCostPercent * 100).toFixed(1) + "%",
+      originCost: Math.round(originCostResult.originCost),
+      fobInr: Math.round(fobInr),
+      freight: Math.round(freightPerUnit),
+      insurancePct,
+      cif: Math.round(core.cif),
+      effectiveBcd: effectiveBcd + "%",
+      bcd: Math.round(core.bcd),
+      sws: Math.round(core.sws),
+      igst: Math.round(core.igst),
+      totalDuty: Math.round(core.totalDuty),
+      landedCost: Math.round(core.landedCost),
+    });
+  }
 
   // 5. Build breakdown — prepend origin cost if EXW
   const originRows: CostBreakdownItem[] = originCostResult.originCost > 0
@@ -107,11 +139,55 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
 
 // ─── Unit Economics ────────────────────────────────────────────────────────────
 
+/**
+ * Derive the MRP required to achieve a target net margin.
+ *
+ * Margin is defined as: netProfit / netRevenue (ex-GST)
+ *
+ * Key: marketing cost is calculated on MRP (Indian convention),
+ * not on netRevenue. So the effective marketing drain on netRevenue
+ * must be scaled by the GST multiplier.
+ *
+ * Derivation:
+ *   let nR = netRevenue = mrp / (1 + gstRate)
+ *   netProfit = nR - nR*commRate - nR*payRate - mrp*mktRate - fixedCosts
+ *             = nR * (1 - commRate - payRate - (1+gstRate)*mktRate) - fixedCosts
+ *   margin    = netProfit / nR
+ *             = (1 - commRate - payRate - (1+gstRate)*mktRate) - fixedCosts/nR
+ *
+ *   Solving for nR:
+ *   nR = fixedCosts / ((1 - commRate - payRate - (1+gstRate)*mktRate) - targetMargin)
+ *   mrp = nR * (1 + gstRate)
+ */
+function deriveSellingPrice(
+  targetMarginPercent: number,
+  gstRate: number,           // as percentage (e.g. 18)
+  commissionPercent: number,
+  paymentFeePercent: number,
+  marketingPercent: number,
+  logisticsCost: number,
+  landedCost: number
+): number | null {
+  const targetMargin = targetMarginPercent / 100;
+  const commRate = commissionPercent / 100;
+  const payRate = paymentFeePercent / 100;
+  const mktRate = marketingPercent / 100;
+  const gstMult = 1 + gstRate / 100;
+
+  // Marketing is on MRP, so its effective rate vs netRevenue is mktRate * gstMult
+  const denominator = (1 - commRate - payRate - mktRate * gstMult) - targetMargin;
+  if (denominator <= 0) return null; // target margin is unachievable with these inputs
+
+  const fixedCosts = logisticsCost + landedCost;
+  const netRevenue = fixedCosts / denominator;
+  const mrp = netRevenue * gstMult;
+  return Math.ceil(mrp); // round up to nearest whole rupee
+}
+
 export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomicsResult {
-  const { sellingPrice, marketplace, category, weight, landedCost, marketingPercent, returnRate } = inputs;
+  const { marketplace, category, weight, landedCost, marketingPercent, returnRate } = inputs;
 
   const gstRate = getOutputGstRate(category);
-  const { basePrice: netRevenuePre, gstAmount } = deconstructGst(sellingPrice, category);
 
   const fees = getMarketplaceFees(marketplace, category);
   const effectiveCommission =
@@ -119,14 +195,37 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
       ? { ...fees, commissionPercent: inputs.commissionOverride, totalFeePercent: inputs.commissionOverride + fees.paymentFeePercent }
       : fees;
 
-  const { commissionAmount, closingFee, paymentFeeAmount, totalDeduction, netAfterFees } =
-    calculateMarketplaceDeduction(netRevenuePre, effectiveCommission);
-
   const logistics = calculateLastMileLogistics(weight, returnRate);
   const logisticsCost =
     inputs.logisticsOverride !== undefined
       ? inputs.logisticsOverride + logistics.returnCost
       : logistics.netLogisticsCost;
+
+  // ── Selling price: KNOWN or RECOMMEND ──────────────────────────────────────
+  let sellingPrice = inputs.sellingPrice;
+  let recommendedSellingPrice: number | null = null;
+
+  if (inputs.sellingPriceMode === "RECOMMEND" && inputs.targetMarginPercent !== undefined) {
+    const derived = deriveSellingPrice(
+      inputs.targetMarginPercent,
+      gstRate,
+      effectiveCommission.commissionPercent,
+      effectiveCommission.paymentFeePercent,
+      marketingPercent,
+      logisticsCost,
+      landedCost
+    );
+    if (derived !== null) {
+      recommendedSellingPrice = derived;
+      sellingPrice = derived; // use derived price for all downstream P&L
+    }
+  }
+
+  // ── P&L from resolved sellingPrice ─────────────────────────────────────────
+  const { basePrice: netRevenuePre, gstAmount } = deconstructGst(sellingPrice, category);
+
+  const { commissionAmount, closingFee, paymentFeeAmount, totalDeduction, netAfterFees } =
+    calculateMarketplaceDeduction(netRevenuePre, effectiveCommission);
 
   const marketingCost = calculateMarketingCost(sellingPrice, marketingPercent);
 
@@ -163,6 +262,7 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
 
   return {
     sellingPrice,
+    recommendedSellingPrice,
     gst: gstAmount,
     netRevenue: netAfterFees,
     landedCost,

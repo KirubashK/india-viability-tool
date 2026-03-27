@@ -44,6 +44,9 @@ export interface ValueChainInputs {
   // HS / origin
   hsCode: string;
   countryOfOrigin: string;
+  // Origin cost override (EXW→FOB). Overrides the country-based auto %.
+  // Set as a percentage of baseCostInr (e.g. 8 means 8%).
+  originCostOverridePercent?: number;
   // Duty manual overrides
   bcdOverride?: number;
   swsOverride?: number;
@@ -51,6 +54,8 @@ export interface ValueChainInputs {
   // Legacy field kept for backward compat — populated by engine or override
   freightCost: number;
 }
+
+export type SellingPriceMode = "KNOWN" | "RECOMMEND";
 
 export interface UnitEconomicsInputs {
   sellingPrice: number;
@@ -61,6 +66,9 @@ export interface UnitEconomicsInputs {
   landedCost: number;
   marketingPercent: number;
   returnRate: number;
+  // Selling price mode: KNOWN = user inputs price, RECOMMEND = calc from target margin
+  sellingPriceMode: SellingPriceMode;
+  targetMarginPercent?: number;  // used when sellingPriceMode = "RECOMMEND"
   // Manual overrides
   commissionOverride?: number;
   logisticsOverride?: number;
