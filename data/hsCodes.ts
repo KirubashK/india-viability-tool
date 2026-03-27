@@ -73,6 +73,7 @@ export const COUNTRIES: Record<string, string> = {
   CHN: "China",
   JPN: "Japan",
   KOR: "South Korea",
+  RUS: "Russia",
   AUS: "Australia",
   SGP: "Singapore",
   THA: "Thailand",

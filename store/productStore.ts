@@ -37,6 +37,7 @@ interface ProductActions {
     market: MarketPositionResult | null;
     verdict: VerdictResult;
   }) => void;
+  setUnitEconomicsResult: (result: UnitEconomicsResult, verdict: VerdictResult) => void;
   setIsCalculating: (v: boolean) => void;
   resetOverrides: () => void;
 }
@@ -64,6 +65,7 @@ const defaultValueChain: ValueChainInputs = {
   weight: 0.3,
   dimensions: { length: 10, width: 8, height: 5 },
   freightMode: getDefaultFreightMode("BEAUTY"),
+  seaShippingType: "FCL",
   insurancePercent: 0.5,
   hsCode: "3304",
   countryOfOrigin: "USA",
@@ -166,6 +168,13 @@ export const useProductStore = create<ProductState & ProductActions>()(
         state.hasCalculated = true;
         state.isCalculating = false;
         state.unitEconomics.landedCost = landed.totalLandedCost;
+      }),
+
+    setUnitEconomicsResult: (result, verdict) =>
+      set((state) => {
+        state.unitEconomicsResult = result;
+        state.verdictResult = verdict;
+        state.unitEconomics.landedCost = result.landedCost;
       }),
 
     setIsCalculating: (v) =>

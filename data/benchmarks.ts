@@ -75,6 +75,7 @@ export const EXCHANGE_RATES: Record<string, number> = {
   AUD: 54.3,
   JPY: 0.56,
   CNY: 11.5,
+  RUB: 0.92,
   SGD: 61.8,
   AED: 22.7,
   GBP2: 104.8,

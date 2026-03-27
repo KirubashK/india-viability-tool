@@ -31,19 +31,19 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
   );
   const fobInr = originCostResult.fobValueInr;
 
-  // 2. Import freight per unit (FCL sea or volumetric air)
+  // 2. Import freight per unit
   const dims = inputs.dimensions ?? { length: 10, width: 8, height: 5 };
   const weight = inputs.weight ?? 0.3;
-  // Use the user's actual exchange rate for container cost conversion.
-  // Sea container costs are in USD, so we need USD→INR specifically.
-  // If the user's currency is USD, use their rate directly. Otherwise fall back
-  // to the stored USD rate. This ensures freight responds to the editable FX input.
+  // Container/LCL costs are priced in USD — always use the USD→INR rate regardless of
+  // the user's invoicing currency. If user currency IS USD, use their editable rate
+  // directly. Otherwise use the static USD rate from the table.
   const usdToInr = inputs.currency === "USD"
-    ? (inputs.exchangeRate ?? EXCHANGE_RATES["USD"] ?? 83.5)
+    ? (inputs.exchangeRate > 0 ? inputs.exchangeRate : (EXCHANGE_RATES["USD"] ?? 83.5))
     : (EXCHANGE_RATES["USD"] ?? 83.5);
 
   const freightEngineResult = getImportFreightPerUnit(
     inputs.freightMode ?? "AIR",
+    inputs.seaShippingType ?? "FCL",
     inputs.countryOfOrigin,
     weight,
     dims,
@@ -68,13 +68,9 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
     ...(hasValidIgstOverride && { igst: inputs.igstOverride! }),
   };
 
-  // BCD: explicit user override ALWAYS wins, even over FTA preferential rates.
-  // Without this, entering 20% on an FTA country would silently use preferentialDuty (e.g. 10%).
-  const effectiveBcd = hasValidBcdOverride
-    ? inputs.bcdOverride!
-    : dutyRates.isPreferential && dutyRates.preferentialDuty !== null
-      ? dutyRates.preferentialDuty
-      : dutyRates.bcd;
+  // BCD: user override ALWAYS wins. If no override, use dutyRates.bcd directly.
+  // FTA preferential duty is NOT applied here — it would mismatch the UI "Auto: X%" display.
+  const effectiveBcd = hasValidBcdOverride ? inputs.bcdOverride! : dutyRates.bcd;
 
   // 4. CIF and duty cascade via core (NaN-safe arithmetic)
   const insurancePct = inputs.insurancePercent ?? 0.5;
@@ -237,9 +233,10 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
 
   const logistics = calculateLastMileLogistics(weight, returnRate);
   const hasValidLogisticsOverride = inputs.logisticsOverride !== undefined && !isNaN(inputs.logisticsOverride);
-  const logisticsCost = hasValidLogisticsOverride
-    ? inputs.logisticsOverride! + logistics.returnCost
-    : logistics.netLogisticsCost;
+  // Override applies ONLY to the forward last-mile cost. Return cost is always added.
+  // 0 is a valid override (e.g. seller-fulfilled with no delivery charge).
+  const forwardLastMile = hasValidLogisticsOverride ? inputs.logisticsOverride! : logistics.forwardCost;
+  const logisticsCost = forwardLastMile + logistics.returnCost;
 
   // ── Selling price: KNOWN or RECOMMEND ──────────────────────────────────────
   // IMPORTANT: in RECOMMEND mode always start at 0 — never inherit the previous

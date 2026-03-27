@@ -54,6 +54,25 @@ export default function ProductAnalysisPage() {
     localStorage.setItem("includeGst", JSON.stringify(includeGstInLandedCost));
   }, [includeGstInLandedCost]);
 
+  // Instant IGST toggle: when the toggle changes after an analysis has run,
+  // recompute unit economics using the already-stored landed cost result.
+  // Does NOT rerun calculateLandedCost — only the unit econ layer changes.
+  useEffect(() => {
+    if (!landedCostResult) return;
+    const marginLandedCost = includeGstInLandedCost
+      ? landedCostResult.totalLandedCost
+      : (landedCostResult.landedCostExclGst ?? landedCostResult.totalLandedCost);
+    const ueInputs = { ...unitEconomics, landedCost: marginLandedCost };
+    const unitEcon = calculateUnitEconomics(ueInputs);
+    const effectiveSellingPrice = unitEcon.sellingPrice > 0 ? unitEcon.sellingPrice : 0;
+    const market = competitorPrices.length > 0
+      ? calculateMarketPosition({ sellingPrice: effectiveSellingPrice, competitorPrices })
+      : null;
+    const verdict = getVerdict(unitEcon.marginPercent, market?.position ?? "AT", product.category);
+    setResults({ landed: landedCostResult, unitEcon, market, verdict });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeGstInLandedCost]);
+
   const runAnalysis = useCallback(() => {
     setIsCalculating(true);
     setTimeout(() => {
@@ -141,20 +160,33 @@ export default function ProductAnalysisPage() {
               Portfolio
             </Link>
             <SaveAnalysisButton />
-            {/* IGST toggle — off by default (ITC claimable); turn on for non-ITC scenarios */}
-            <button
-              type="button"
-              onClick={() => setIncludeGstInLandedCost(v => !v)}
-              title={includeGstInLandedCost ? "IGST included in landed cost (click to exclude)" : "IGST excluded from landed cost / ITC mode (click to include)"}
-              className={cn(
-                "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
-                includeGstInLandedCost
-                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  : "border-slate-200 text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              IGST {includeGstInLandedCost ? "incl." : "excl."}
-            </button>
+            {/* IGST toggle — switches instantly without re-running analysis */}
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setIncludeGstInLandedCost(false)}
+                className={cn(
+                  "px-3 py-2 transition-colors",
+                  !includeGstInLandedCost
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white text-slate-500 hover:bg-slate-50"
+                )}
+              >
+                IGST Excluded
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncludeGstInLandedCost(true)}
+                className={cn(
+                  "px-3 py-2 transition-colors border-l border-slate-200",
+                  includeGstInLandedCost
+                    ? "bg-amber-500 text-white"
+                    : "bg-white text-slate-500 hover:bg-slate-50"
+                )}
+              >
+                IGST Included
+              </button>
+            </div>
             {hasCalculated && (
               <button onClick={handleExport}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">

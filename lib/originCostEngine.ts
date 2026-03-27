@@ -6,6 +6,7 @@ const ORIGIN_COST_RATES: Record<string, number> = {
   CHN: 0.06,  // China — short inland, efficient export infrastructure
   KOR: 0.05,  // South Korea
   JPN: 0.05,  // Japan
+  RUS: 0.10,  // Russia — longer inland routes, additional export docs
   AUS: 0.075, // Australia
   NZL: 0.075,
   ARE: 0.04,  // UAE — free-zone advantage

@@ -13,7 +13,7 @@ import { HsCodeSelector } from "@/components/HsCodeSelector";
 import { Info, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "AUD", "JPY", "CNY"];
+const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "AUD", "JPY", "CNY", "RUB"];
 
 const inputCls =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all";
@@ -64,6 +64,7 @@ export function ValueChainForm() {
   const watchedCountry = watch("countryOfOrigin");
   const watchedHs = watch("hsCode");
   const watchedMode = watch("freightMode");
+  const watchedSeaType = watch("seaShippingType");
   const watchedCostType = watch("costType");
   const watchedWeight = watch("weight");
   // Watch individual dimension primitives so useMemo reacts to each field change.
@@ -72,7 +73,6 @@ export function ValueChainForm() {
   const watchedDimL = watch("dimensions.length");
   const watchedDimW = watch("dimensions.width");
   const watchedDimH = watch("dimensions.height");
-  const watchedDims = watch("dimensions");
   const watchedExchangeRate = watch("exchangeRate");
 
   // Sync form → store (debounced)
@@ -99,24 +99,30 @@ export function ValueChainForm() {
 
   // Auto-computed freight from engine
   const freightPreview = useMemo(() => {
-    const dims = watchedDims ?? { length: 10, width: 8, height: 5 };
+    // Build dims directly from the watched primitives — these are the SAME values
+    // that are in the dependency array, guaranteeing no stale reference.
+    // Using watchedDims (parent object) inside the body while primitives are
+    // in deps can cause stale values if RHF returns the same object reference.
+    const dims = {
+      length: Number(watchedDimL) || 0,
+      width: Number(watchedDimW) || 0,
+      height: Number(watchedDimH) || 0,
+    };
     const w = Number(watchedWeight) || 0.3;
-    // Use the watched (user-editable) exchange rate for the preview.
-    // For non-USD currencies, sea container costs still need the USD rate.
+    // Container/LCL costs are in USD — use USD→INR rate for preview.
     const usdRate = watchedCurrency === "USD"
       ? (watchedExchangeRate || EXCHANGE_RATES["USD"] || 83.5)
       : (EXCHANGE_RATES["USD"] || 83.5);
     return getImportFreightPerUnit(
       watchedMode ?? "AIR",
+      watchedSeaType ?? "FCL",
       watchedCountry ?? "USA",
       w,
       dims,
       usdRate,
       undefined // no override — preview only
     );
-  // Use primitive dim values (not the object) as deps to guarantee reactivity
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedMode, watchedCountry, watchedWeight, watchedDimL, watchedDimW, watchedDimH, watchedCurrency, watchedExchangeRate]);
+  }, [watchedMode, watchedSeaType, watchedCountry, watchedWeight, watchedDimL, watchedDimW, watchedDimH, watchedCurrency, watchedExchangeRate]);
 
   const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
   // Use the actual watched exchange rate (user-editable), not the static table.
@@ -272,6 +278,28 @@ export function ValueChainForm() {
           </div>
         </div>
 
+        {/* FCL / LCL sub-toggle — only visible in SEA mode */}
+        {watchedMode === "SEA" && (
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold w-fit">
+            {(["FCL", "LCL"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setValue("seaShippingType", t)}
+                className={cn(
+                  "px-3 py-1.5 transition-colors",
+                  (watchedSeaType ?? "FCL") === t
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white text-slate-500 hover:bg-slate-50",
+                  t === "LCL" && "border-l border-slate-200"
+                )}
+              >
+                {t === "FCL" ? "📦 FCL" : "🔀 LCL"}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Auto-calculated freight display */}
         <div className="flex items-center justify-between">
           <div>
@@ -284,7 +312,9 @@ export function ValueChainForm() {
             title={freightPreview.tooltip}
             className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-500 cursor-help"
           >
-            {watchedMode === "SEA" ? "Vol. ÷6000" : "Vol. ÷5000"} ⓘ
+            {watchedMode === "SEA"
+              ? ((watchedSeaType ?? "FCL") === "FCL" ? "FCL ÷ units" : "LCL $/CBM")
+              : "Slab ÷5000"} ⓘ
           </span>
         </div>
 
@@ -310,15 +340,28 @@ export function ValueChainForm() {
                   <p className="text-slate-400">Chargeable weight</p>
                   <p className="font-semibold text-slate-700">{(freightPreview.seaChargeableWeight ?? 0).toFixed(3)} kg</p>
                 </div>
-                <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Rate / kg (sea)</p>
-                  <p className="font-semibold text-slate-700">₹{freightPreview.seaRatePerKg ?? 0}</p>
-                </div>
-                {freightPreview.unitsPerContainer !== undefined && (
-                  <div className="bg-white rounded-lg p-2 text-xs">
-                    <p className="text-slate-400">FCL units / container</p>
-                    <p className="font-semibold text-slate-700">{freightPreview.unitsPerContainer.toLocaleString("en-IN")}</p>
-                  </div>
+                {(watchedSeaType ?? "FCL") === "FCL" ? (
+                  <>
+                    <div className="bg-white rounded-lg p-2 text-xs">
+                      <p className="text-slate-400">FCL units / container</p>
+                      <p className="font-semibold text-slate-700">{(freightPreview.unitsPerContainer ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-xs">
+                      <p className="text-slate-400">Container cost (INR)</p>
+                      <p className="font-semibold text-slate-700">₹{Math.round(freightPreview.containerCost ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-white rounded-lg p-2 text-xs">
+                      <p className="text-slate-400">Unit volume (CBM)</p>
+                      <p className="font-semibold text-slate-700">{(freightPreview.lclUnitVolumeCbm ?? 0).toFixed(5)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-xs">
+                      <p className="text-slate-400">LCL cost (USD)</p>
+                      <p className="font-semibold text-slate-700">${(freightPreview.lclFreightUSD ?? 0).toFixed(2)}</p>
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -329,12 +372,12 @@ export function ValueChainForm() {
                   <p className="font-semibold text-slate-700">{freightPreview.volumetricWeight?.toFixed(3)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Chargeable weight</p>
-                  <p className="font-semibold text-slate-700">{freightPreview.chargeableWeight?.toFixed(3)} kg</p>
+                  <p className="text-slate-400">Chargeable (rounded)</p>
+                  <p className="font-semibold text-slate-700">{freightPreview.chargeableWeight?.toFixed(1)} kg</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Rate / kg (air)</p>
-                  <p className="font-semibold text-slate-700">₹{freightPreview.ratePerKg}</p>
+                  <p className="text-slate-400">Slab rate</p>
+                  <p className="font-semibold text-slate-700">₹{freightPreview.ratePerKg}/kg</p>
                 </div>
               </>
             )}

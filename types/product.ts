@@ -1,8 +1,9 @@
 export type FreightMode = "AIR" | "SEA";
+export type SeaShippingType = "FCL" | "LCL";
 export type CostType = "FOB" | "EXW";
 export type Marketplace = "AMAZON" | "NYKAA" | "MYNTRA" | "FLIPKART" | "MEESHO";
 export type Category = "BEAUTY" | "FOOD" | "APPAREL" | "FMCG" | "PET_CARE" | "ELECTRONICS" | "HOME";
-export type Currency = "USD" | "EUR" | "GBP" | "AUD" | "JPY" | "CNY";
+export type Currency = "USD" | "EUR" | "GBP" | "AUD" | "JPY" | "CNY" | "RUB";
 export type Verdict = "GO" | "BORDERLINE" | "NO_GO";
 export type MarketPosition = "BELOW" | "AT" | "ABOVE";
 
@@ -38,6 +39,7 @@ export interface ValueChainInputs {
   dimensions: ProductDimensions;
   // Freight
   freightMode: FreightMode;
+  seaShippingType: SeaShippingType; // FCL or LCL — only used when freightMode === "SEA"
   freightOverride?: number;   // manual per-unit INR override — skips engine
   // Insurance
   insurancePercent: number;
@@ -71,11 +73,9 @@ export interface UnitEconomicsInputs {
   targetMarginPercent?: number;  // used when sellingPriceMode = "RECOMMEND"
   // Manual overrides
   commissionOverride?: number;
-  paymentFeeOverride?: number;
-  closingFeeOverride?: number;
-  logisticsOverride?: number;
   paymentFeeOverride?: number;  // overrides marketplace default payment fee %
   closingFeeOverride?: number;  // overrides marketplace default closing fee (INR)
+  logisticsOverride?: number;   // overrides forward last-mile cost only; return cost always added
 }
 
 export interface MarketInputs {

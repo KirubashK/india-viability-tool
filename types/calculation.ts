@@ -15,14 +15,19 @@ export interface FreightEngineResult {
   seaVolumetricWeight?: number;
   seaChargeableWeight?: number;
   seaRatePerKg?: number;
-  // SEA FCL context (informational only — shown in advanced breakdown)
+  // SEA shipping type
+  seaShippingType?: "FCL" | "LCL";
+  // SEA FCL context (informational — shown in advanced breakdown)
   unitsPerContainer?: number;
   containerCost?: number;
   portClearancePerUnit?: number;
-  // AIR-specific (chargeable weight model, divisor = 5000)
+  // SEA LCL context
+  lclUnitVolumeCbm?: number;
+  lclFreightUSD?: number;
+  // AIR-specific (slab-based pricing, divisor = 5000)
   volumetricWeight?: number;
   chargeableWeight?: number;
-  ratePerKg?: number;
+  ratePerKg?: number;     // effective slab rate used
   handlingPerUnit?: number;
   // shared
   isOverridden: boolean;
