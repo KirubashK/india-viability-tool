@@ -37,7 +37,7 @@ function FormField({ label, tooltip, children, hint }: FormFieldProps) {
 }
 
 export function UnitEconomicsForm() {
-  const { unitEconomics, setUnitEconomics, setMarketplace, product } = useProductStore();
+  const { unitEconomics, setUnitEconomics, setMarketplace, product, unitEconomicsResult, hasCalculated } = useProductStore();
   const { register, watch, setValue } = useForm<UnitEconomicsInputs>({
     defaultValues: unitEconomics,
   });
@@ -98,21 +98,28 @@ export function UnitEconomicsForm() {
             />
           </FormField>
         ) : (
-          <FormField
-            label="Target Margin %"
-            tooltip="Net margin as % of ex-GST revenue. We will calculate the minimum MRP needed."
-            hint="The recommended MRP will appear in results after running the analysis."
-          >
-            <input
-              type="number"
-              step="1"
-              min="1"
-              max="80"
-              {...register("targetMarginPercent", { valueAsNumber: true })}
-              className={inputCls}
-              placeholder="e.g. 30"
-            />
-          </FormField>
+          <>
+            <FormField
+              label="Target Margin %"
+              tooltip="Net margin as % of ex-GST revenue. We will calculate the minimum MRP needed."
+              hint="The recommended MRP will appear in results after running the analysis."
+            >
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max="80"
+                {...register("targetMarginPercent", { valueAsNumber: true })}
+                className={inputCls}
+                placeholder="e.g. 30"
+              />
+            </FormField>
+            {hasCalculated && unitEconomicsResult && unitEconomicsResult.sellingPrice === 0 && (
+              <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 font-medium">
+                Unable to derive price for selected margin. Try lowering target margin.
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -204,6 +211,32 @@ export function UnitEconomicsForm() {
                 type="number"
                 placeholder="Auto"
                 {...register("logisticsOverride", { valueAsNumber: true })}
+                className={cn(inputCls, "placeholder:text-slate-400")}
+              />
+            </FormField>
+
+            <FormField
+              label="Payment Fee % override"
+              hint={`Auto: ${autoFees.paymentFeePercent}%`}
+            >
+              <input
+                type="number"
+                step="0.1"
+                placeholder={String(autoFees.paymentFeePercent)}
+                {...register("paymentFeeOverride", { valueAsNumber: true })}
+                className={cn(inputCls, "placeholder:text-slate-400")}
+              />
+            </FormField>
+
+            <FormField
+              label="Closing Fee override (₹)"
+              hint={`Auto: ₹${autoFees.closingFee}`}
+            >
+              <input
+                type="number"
+                step="1"
+                placeholder={String(autoFees.closingFee)}
+                {...register("closingFeeOverride", { valueAsNumber: true })}
                 className={cn(inputCls, "placeholder:text-slate-400")}
               />
             </FormField>

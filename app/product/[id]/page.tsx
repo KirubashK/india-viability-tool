@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useCallback, useState } from "react";
+import React, { useMemo, useCallback, useState, useEffect } from "react";
 import { useProductStore } from "@/store/productStore";
 import {
   calculateLandedCost,
@@ -44,15 +44,35 @@ export default function ProductAnalysisPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("analysis");
   const [compareOpen, setCompareOpen] = useState(false);
 
+  const [includeGstInLandedCost, setIncludeGstInLandedCost] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const saved = localStorage.getItem("includeGst");
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("includeGst", JSON.stringify(includeGstInLandedCost));
+  }, [includeGstInLandedCost]);
+
   const runAnalysis = useCallback(() => {
     setIsCalculating(true);
     setTimeout(() => {
       try {
         const landed = calculateLandedCost(valueChain);
-        const ueInputs = { ...unitEconomics, landedCost: landed.totalLandedCost };
+        // IGST toggle: when false (default) use landedCostExclGst — IGST is recoverable
+        // via ITC on marketplace sales so it shouldn't reduce the margin.
+        // When true, include IGST in landed cost (correct for non-ITC scenarios).
+        const marginLandedCost = includeGstInLandedCost
+          ? landed.totalLandedCost
+          : (landed.landedCostExclGst ?? landed.totalLandedCost);
+        const ueInputs = { ...unitEconomics, landedCost: marginLandedCost };
         const unitEcon = calculateUnitEconomics(ueInputs);
+        // Use ONLY the resolved price from unitEcon — never fall back to the stale
+        // product.sellingPrice. If RECOMMEND mode failed (sellingPrice=0), market
+        // position receives 0 and returns safe neutral outputs.
+        const effectiveSellingPrice = unitEcon.sellingPrice > 0 ? unitEcon.sellingPrice : 0;
         const market = competitorPrices.length > 0
-          ? calculateMarketPosition({ sellingPrice: product.sellingPrice, competitorPrices })
+          ? calculateMarketPosition({ sellingPrice: effectiveSellingPrice, competitorPrices })
           : null;
         const verdict = getVerdict(unitEcon.marginPercent, market?.position ?? "AT", product.category);
         setResults({ landed, unitEcon, market, verdict });
@@ -61,7 +81,7 @@ export default function ProductAnalysisPage() {
         setIsCalculating(false);
       }
     }, 350);
-  }, [valueChain, unitEconomics, competitorPrices, product, setIsCalculating, setResults]);
+  }, [valueChain, unitEconomics, competitorPrices, product, includeGstInLandedCost, setIsCalculating, setResults]);
 
   const handleExport = useCallback(() => {
     if (landedCostResult && unitEconomicsResult && verdictResult) {
@@ -121,6 +141,20 @@ export default function ProductAnalysisPage() {
               Portfolio
             </Link>
             <SaveAnalysisButton />
+            {/* IGST toggle — off by default (ITC claimable); turn on for non-ITC scenarios */}
+            <button
+              type="button"
+              onClick={() => setIncludeGstInLandedCost(v => !v)}
+              title={includeGstInLandedCost ? "IGST included in landed cost (click to exclude)" : "IGST excluded from landed cost / ITC mode (click to include)"}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                includeGstInLandedCost
+                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              IGST {includeGstInLandedCost ? "incl." : "excl."}
+            </button>
             {hasCalculated && (
               <button onClick={handleExport}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
@@ -235,8 +269,8 @@ export default function ProductAnalysisPage() {
                     <MarginPanel
                       marginPercent={unitEconomicsResult.marginPercent}
                       breakEven={unitEconomicsResult.breakEvenPrice}
-                      sellingPrice={product.sellingPrice}
-                      landedRatio={(landedCostResult.totalLandedCost / product.sellingPrice) * 100}
+                      sellingPrice={unitEconomicsResult.sellingPrice}
+                      landedRatio={(landedCostResult.totalLandedCost / Math.max(1, unitEconomicsResult.sellingPrice)) * 100}
                       marketingCost={unitEconomicsResult.marketingCost}
                       logisticsCost={unitEconomicsResult.logisticsCost}
                       marketplaceFees={unitEconomicsResult.marketplaceFees}
@@ -260,7 +294,7 @@ export default function ProductAnalysisPage() {
 
                 <ResultCard title="Recommendations & Insights" icon={Activity}>
                   <RecommendationsPanel verdict={verdictResult} landedCost={landedCostResult}
-                    category={product.category} sellingPrice={product.sellingPrice} />
+                    category={product.category} sellingPrice={unitEconomicsResult.sellingPrice} />
                 </ResultCard>
               </section>
             )}

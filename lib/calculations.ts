@@ -91,6 +91,11 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
   const core = calculateLandedCostCore(coreInput);
   const effectiveDutyRate = core.cif > 0 ? (core.totalDuty / core.cif) * 100 : 0;
 
+  // IGST split: exclGst = CIF + BCD + SWS (IGST excluded — recoverable via ITC on marketplace sales)
+  //             inclGst = full duty-paid cost (CIF + all duties including IGST)
+  const landedCostExclGst = core.cif + core.bcd + core.sws;
+  const landedCostInclGst = core.landedCost; // = CIF + BCD + SWS + IGST
+
   // ── Debug trace (remove before production) ──────────────────────────────
   if (process.env.NODE_ENV === "development") {
     console.log("[calculateLandedCost]", {
@@ -145,6 +150,8 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
     totalDuty: core.totalDuty,
     totalLandedCost: core.landedCost,
     perUnitLandedCost: core.landedCost,
+    landedCostExclGst,
+    landedCostInclGst,
     effectiveDutyRate,
     breakdown,
   };
@@ -212,9 +219,21 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
   // coreCalculations silently converts it to 0, making the commission appear as 0%.
   // Fix: check !isNaN before using any optional numeric override.
   const hasValidCommOverride = inputs.commissionOverride !== undefined && !isNaN(inputs.commissionOverride);
-  const effectiveCommission = hasValidCommOverride
-    ? { ...fees, commissionPercent: inputs.commissionOverride!, totalFeePercent: inputs.commissionOverride! + fees.paymentFeePercent }
-    : fees;
+  const hasValidPaymentOverride = inputs.paymentFeeOverride !== undefined && !isNaN(inputs.paymentFeeOverride);
+  const hasValidClosingOverride = inputs.closingFeeOverride !== undefined && !isNaN(inputs.closingFeeOverride);
+
+  // Build effective commission: each field falls back to auto when override is absent or NaN
+  const effectiveCommissionPercent = hasValidCommOverride ? inputs.commissionOverride! : fees.commissionPercent;
+  const effectivePaymentFeePercent = hasValidPaymentOverride ? inputs.paymentFeeOverride! : fees.paymentFeePercent;
+  const effectiveClosingFee = hasValidClosingOverride ? inputs.closingFeeOverride! : fees.closingFee;
+
+  const effectiveCommission = {
+    ...fees,
+    commissionPercent: effectiveCommissionPercent,
+    paymentFeePercent: effectivePaymentFeePercent,
+    closingFee: effectiveClosingFee,
+    totalFeePercent: effectiveCommissionPercent + effectivePaymentFeePercent,
+  };
 
   const logistics = calculateLastMileLogistics(weight, returnRate);
   const hasValidLogisticsOverride = inputs.logisticsOverride !== undefined && !isNaN(inputs.logisticsOverride);
@@ -284,9 +303,20 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
 
   const totalVariableCostRate =
     (effectiveCommission.commissionPercent + effectiveCommission.paymentFeePercent + marketingPercent) / 100;
-  const fixedCosts = landedCost + logisticsCost + closingFee;
-  const beDenominator = 1 - totalVariableCostRate - gstAmount / sellingPrice;
-  const breakEvenPrice: number | null = beDenominator > 0 ? fixedCosts / beDenominator : null;
+  const fixedCosts = landedCost + logisticsCost + effectiveCommission.closingFee;
+
+  // Break-even: the MRP at which netProfit = 0.
+  // variableCostPercent captures all variable drains (commission + payment + marketing) as
+  // a fraction of netRevenue. Fixed costs are recovered when:
+  //   netRevenue * (1 - variableCostPercent) = fixedCosts
+  //   netRevenue = fixedCosts / (1 - variableCostPercent)
+  //   mrp = netRevenue * (1 + gstRate/100)
+  // Expressed directly as MRP:
+  const variableCostPercent = effectiveCommission.commissionPercent + effectiveCommission.paymentFeePercent + marketingPercent;
+  const breakEvenDenom = 1 - variableCostPercent / 100;
+  const breakEvenPrice: number | null = breakEvenDenom > 0
+    ? Math.ceil((fixedCosts / breakEvenDenom) * (1 + gstRate / 100))
+    : null;
 
   const breakdown: CostBreakdownItem[] = [
     { label: "MRP / Selling Price", value: sellingPrice },

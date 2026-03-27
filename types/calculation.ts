@@ -51,6 +51,11 @@ export interface LandedCostResult {
   totalDuty: number;
   totalLandedCost: number;
   perUnitLandedCost: number;
+  // IGST split — use for margin calculations when ITC is claimable
+  // landedCostExclGst = CIF + BCD + SWS (IGST excluded — recoverable via ITC)
+  // landedCostInclGst = CIF + BCD + SWS + IGST (full duty-paid cost)
+  landedCostExclGst: number;
+  landedCostInclGst: number;
   breakdown: CostBreakdownItem[];
   effectiveDutyRate: number;
 }

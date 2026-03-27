@@ -180,6 +180,8 @@ export const useProductStore = create<ProductState & ProductActions>()(
         delete state.valueChain.originCostOverridePercent;
         delete state.unitEconomics.commissionOverride;
         delete state.unitEconomics.logisticsOverride;
+        delete state.unitEconomics.paymentFeeOverride;
+        delete state.unitEconomics.closingFeeOverride;
       }),
   }))
 );

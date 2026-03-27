@@ -71,7 +71,11 @@ export interface UnitEconomicsInputs {
   targetMarginPercent?: number;  // used when sellingPriceMode = "RECOMMEND"
   // Manual overrides
   commissionOverride?: number;
+  paymentFeeOverride?: number;
+  closingFeeOverride?: number;
   logisticsOverride?: number;
+  paymentFeeOverride?: number;  // overrides marketplace default payment fee %
+  closingFeeOverride?: number;  // overrides marketplace default closing fee (INR)
 }
 
 export interface MarketInputs {

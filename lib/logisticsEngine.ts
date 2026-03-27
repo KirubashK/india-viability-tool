@@ -30,6 +30,8 @@ export function getSeaVolumetricWeight(dims: ProductDimensions): number {
 }
 
 // ─── SEA FREIGHT (FCL MODEL — kept for informational breakdown) ───────────────
+// Container volume per spec: 33,000,000 cm³ (≈ 33 CBM usable)
+// unitVolume = L × W × H (cm³); unitsPerContainer = floor(33,000,000 / unitVolume)
 
 const SEA_CONTAINER_COSTS_USD: Record<string, number> = {
   CHN: 2400, KOR: 2600, JPN: 2600,
@@ -41,7 +43,7 @@ const SEA_CONTAINER_COSTS_USD: Record<string, number> = {
 };
 
 const DEFAULT_SEA_COST_USD = 3000;
-const USABLE_CBM = 29;
+const CONTAINER_VOLUME_CM3 = 33_000_000; // 33 CBM usable per spec
 const PORT_CLEARANCE_INR = 20000;
 
 export function getSeaContainerCostUsd(countryCode: string): number {
@@ -103,8 +105,11 @@ export function getImportFreightPerUnit(
 
     // FCL context — informational only, shown in advanced breakdown
     const containerCostInr = getSeaContainerCostUsd(countryCode) * usdToInrRate;
-    const volumePerUnit = getVolumePerUnitCbm(dims);
-    const unitsPerContainer = volumePerUnit > 0 ? Math.floor(USABLE_CBM / volumePerUnit) : 1000;
+    // unitVolume in cm³; unitsPerContainer = floor(containerVolume / unitVolume)
+    const unitVolumeCm3 = dims.length * dims.width * dims.height;
+    const unitsPerContainer = unitVolumeCm3 > 0
+      ? Math.floor(CONTAINER_VOLUME_CM3 / unitVolumeCm3)
+      : 1000;
     const portClearancePerUnit = PORT_CLEARANCE_INR / Math.max(unitsPerContainer, 1);
 
     return {
