@@ -117,6 +117,7 @@ export function UnitEconomicsForm() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        <FormField label="Marketplace">
           <div className="relative">
             <select {...register("marketplace")} className={selectCls}>
               {MARKETPLACES.map((m) => (
