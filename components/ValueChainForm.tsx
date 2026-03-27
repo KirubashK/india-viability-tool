@@ -66,7 +66,14 @@ export function ValueChainForm() {
   const watchedMode = watch("freightMode");
   const watchedCostType = watch("costType");
   const watchedWeight = watch("weight");
+  // Watch individual dimension primitives so useMemo reacts to each field change.
+  // Watching the parent object "dimensions" may return a stable reference when only
+  // a nested field changes, silently preventing freight recalculation.
+  const watchedDimL = watch("dimensions.length");
+  const watchedDimW = watch("dimensions.width");
+  const watchedDimH = watch("dimensions.height");
   const watchedDims = watch("dimensions");
+  const watchedExchangeRate = watch("exchangeRate");
 
   // Sync form → store (debounced)
   useEffect(() => {
@@ -94,19 +101,27 @@ export function ValueChainForm() {
   const freightPreview = useMemo(() => {
     const dims = watchedDims ?? { length: 10, width: 8, height: 5 };
     const w = Number(watchedWeight) || 0.3;
-    const usdRate = EXCHANGE_RATES["USD"] ?? 83.5;
+    // Use the watched (user-editable) exchange rate for the preview.
+    // For non-USD currencies, sea container costs still need the USD rate.
+    const usdRate = watchedCurrency === "USD"
+      ? (watchedExchangeRate || EXCHANGE_RATES["USD"] || 83.5)
+      : (EXCHANGE_RATES["USD"] || 83.5);
     return getImportFreightPerUnit(
       watchedMode ?? "AIR",
       watchedCountry ?? "USA",
       w,
       dims,
       usdRate,
-      undefined // no override yet — just for preview
+      undefined // no override — preview only
     );
-  }, [watchedMode, watchedCountry, watchedWeight, watchedDims]);
+  // Use primitive dim values (not the object) as deps to guarantee reactivity
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedMode, watchedCountry, watchedWeight, watchedDimL, watchedDimW, watchedDimH, watchedCurrency, watchedExchangeRate]);
 
   const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
-  const baseCostInr = (Number(watch("baseCost")) || 0) * (EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5);
+  // Use the actual watched exchange rate (user-editable), not the static table.
+  const effectiveRate = watchedExchangeRate || EXCHANGE_RATES[watchedCurrency ?? "USD"] || 83.5;
+  const baseCostInr = (Number(watch("baseCost")) || 0) * effectiveRate;
   const autoOriginPct = getOriginCostPercent(watchedCountry ?? "USA");
 
   return (
@@ -188,7 +203,7 @@ export function ValueChainForm() {
           <input type="number" step="0.01" min="0" {...register("baseCost", { valueAsNumber: true })} className={inputCls} placeholder="0.00" />
         </Field>
       </div>
-      <p className="text-xs text-slate-400">≈ ₹{Math.round(baseCostInr).toLocaleString("en-IN")} @ ₹{(EXCHANGE_RATES[watchedCurrency ?? "USD"] ?? 83.5).toFixed(1)}/{watchedCurrency}</p>
+      <p className="text-xs text-slate-400">≈ ₹{Math.round(baseCostInr).toLocaleString("en-IN")} @ ₹{effectiveRate.toFixed(1)}/{watchedCurrency}</p>
 
       {/* Editable exchange rate — allows user to override the static FX table */}
       <Field label="Exchange Rate (₹ per 1 unit)" tooltip="Edit to use live or custom FX rate">

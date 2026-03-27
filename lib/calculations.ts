@@ -52,14 +52,27 @@ export function calculateLandedCost(inputs: ValueChainInputs): LandedCostResult 
   );
   const freightPerUnit = freightEngineResult.freightPerUnit;
 
-  // 3. Duty rates with overrides
-  let dutyRates: DutyRates = getDutyRates(inputs.hsCode, inputs.countryOfOrigin);
-  if (inputs.bcdOverride !== undefined) dutyRates = { ...dutyRates, bcd: inputs.bcdOverride };
-  if (inputs.swsOverride !== undefined) dutyRates = { ...dutyRates, sws: inputs.swsOverride };
-  if (inputs.igstOverride !== undefined) dutyRates = { ...dutyRates, igst: inputs.igstOverride };
+  // 3. Duty rates — user overrides always take precedence over auto-detected rates.
+  // IMPORTANT: form fields with { valueAsNumber: true } produce NaN (not undefined) when
+  // left empty. Use isNaN guards instead of relying on !== undefined alone.
+  const baseDutyRates: DutyRates = getDutyRates(inputs.hsCode, inputs.countryOfOrigin);
 
-  const effectiveBcd =
-    dutyRates.isPreferential && dutyRates.preferentialDuty !== null
+  const hasValidBcdOverride = inputs.bcdOverride !== undefined && !isNaN(inputs.bcdOverride);
+  const hasValidSwsOverride = inputs.swsOverride !== undefined && !isNaN(inputs.swsOverride);
+  const hasValidIgstOverride = inputs.igstOverride !== undefined && !isNaN(inputs.igstOverride);
+
+  const dutyRates: DutyRates = {
+    ...baseDutyRates,
+    ...(hasValidBcdOverride && { bcd: inputs.bcdOverride! }),
+    ...(hasValidSwsOverride && { sws: inputs.swsOverride! }),
+    ...(hasValidIgstOverride && { igst: inputs.igstOverride! }),
+  };
+
+  // BCD: explicit user override ALWAYS wins, even over FTA preferential rates.
+  // Without this, entering 20% on an FTA country would silently use preferentialDuty (e.g. 10%).
+  const effectiveBcd = hasValidBcdOverride
+    ? inputs.bcdOverride!
+    : dutyRates.isPreferential && dutyRates.preferentialDuty !== null
       ? dutyRates.preferentialDuty
       : dutyRates.bcd;
 
@@ -168,6 +181,9 @@ function deriveSellingPrice(
   logisticsCost: number,
   landedCost: number
 ): number | null {
+  // Guard: empty field + valueAsNumber:true gives NaN, not undefined
+  if (!targetMarginPercent || isNaN(targetMarginPercent) || targetMarginPercent <= 0) return null;
+
   const targetMargin = targetMarginPercent / 100;
   const commRate = commissionPercent / 100;
   const payRate = paymentFeePercent / 100;
@@ -190,22 +206,34 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
   const gstRate = getOutputGstRate(category);
 
   const fees = getMarketplaceFees(marketplace, category);
-  const effectiveCommission =
-    inputs.commissionOverride !== undefined
-      ? { ...fees, commissionPercent: inputs.commissionOverride, totalFeePercent: inputs.commissionOverride + fees.paymentFeePercent }
-      : fees;
+
+  // IMPORTANT: form fields with { valueAsNumber: true } produce NaN (not undefined) on empty
+  // input. Using NaN as commissionPercent passes the !== undefined check but then safe() in
+  // coreCalculations silently converts it to 0, making the commission appear as 0%.
+  // Fix: check !isNaN before using any optional numeric override.
+  const hasValidCommOverride = inputs.commissionOverride !== undefined && !isNaN(inputs.commissionOverride);
+  const effectiveCommission = hasValidCommOverride
+    ? { ...fees, commissionPercent: inputs.commissionOverride!, totalFeePercent: inputs.commissionOverride! + fees.paymentFeePercent }
+    : fees;
 
   const logistics = calculateLastMileLogistics(weight, returnRate);
-  const logisticsCost =
-    inputs.logisticsOverride !== undefined
-      ? inputs.logisticsOverride + logistics.returnCost
-      : logistics.netLogisticsCost;
+  const hasValidLogisticsOverride = inputs.logisticsOverride !== undefined && !isNaN(inputs.logisticsOverride);
+  const logisticsCost = hasValidLogisticsOverride
+    ? inputs.logisticsOverride! + logistics.returnCost
+    : logistics.netLogisticsCost;
 
   // ── Selling price: KNOWN or RECOMMEND ──────────────────────────────────────
-  let sellingPrice = inputs.sellingPrice;
+  // IMPORTANT: in RECOMMEND mode always start at 0 — never inherit the previous
+  // KNOWN price. If deriveSellingPrice() returns null the safety guard below must
+  // fire; that only happens when sellingPrice is still 0 after the derive attempt.
+  let sellingPrice = inputs.sellingPriceMode === "RECOMMEND"
+    ? 0
+    : (inputs.sellingPrice || 0);
   let recommendedSellingPrice: number | null = null;
 
-  if (inputs.sellingPriceMode === "RECOMMEND" && inputs.targetMarginPercent !== undefined) {
+  if (inputs.sellingPriceMode === "RECOMMEND"
+    && inputs.targetMarginPercent !== undefined
+    && !isNaN(inputs.targetMarginPercent)) {
     const derived = deriveSellingPrice(
       inputs.targetMarginPercent,
       gstRate,
@@ -217,8 +245,22 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
     );
     if (derived !== null) {
       recommendedSellingPrice = derived;
-      sellingPrice = derived; // use derived price for all downstream P&L
+      sellingPrice = derived;
     }
+  }
+
+  // Guard: if selling price is still zero or invalid (e.g. RECOMMEND with impossible target),
+  // return safe zero-profit defaults rather than letting NaN propagate everywhere.
+  if (!(sellingPrice > 0)) {
+    return {
+      sellingPrice: 0, recommendedSellingPrice,
+      gst: 0, netRevenue: 0, landedCost,
+      marketplaceFees: 0, marketingCost: 0, logisticsCost,
+      returnCost: logistics.returnCost,
+      totalCosts: landedCost + logisticsCost,
+      netProfit: -(landedCost + logisticsCost),
+      marginPercent: 0, breakEvenPrice: null, breakdown: [],
+    };
   }
 
   // ── P&L from resolved sellingPrice ─────────────────────────────────────────

@@ -103,10 +103,9 @@ export const useProductStore = create<ProductState & ProductActions>()(
       set((state) => {
         Object.assign(state.product, updates);
         if (updates.fobPrice !== undefined) state.valueChain.baseCost = updates.fobPrice;
-        if (updates.currency !== undefined) {
-          state.valueChain.currency = updates.currency;
-          state.valueChain.exchangeRate = EXCHANGE_RATES[updates.currency] ?? 83.5;
-        }
+        // Currency is owned by ValueChainForm — it sets exchangeRate via its own useEffect.
+        // Do NOT reset exchangeRate here: it would clobber a custom user-typed FX rate.
+        if (updates.currency !== undefined) state.valueChain.currency = updates.currency;
         if (updates.hsCode !== undefined) state.valueChain.hsCode = updates.hsCode;
         if (updates.countryOfOrigin !== undefined) state.valueChain.countryOfOrigin = updates.countryOfOrigin;
         if (updates.sellingPrice !== undefined) state.unitEconomics.sellingPrice = updates.sellingPrice;
@@ -141,10 +140,10 @@ export const useProductStore = create<ProductState & ProductActions>()(
       set((state) => {
         Object.assign(state.valueChain, updates);
         if (updates.baseCost !== undefined) state.product.fobPrice = updates.baseCost;
-        if (updates.currency !== undefined) {
-          state.product.currency = updates.currency;
-          state.valueChain.exchangeRate = EXCHANGE_RATES[updates.currency] ?? 83.5;
-        }
+        // NOTE: do NOT auto-reset exchangeRate here when currency changes.
+        // The ValueChainForm useEffect owns that sync. Resetting it here would
+        // clobber any custom FX rate the user typed every time the form debounces.
+        if (updates.currency !== undefined) state.product.currency = updates.currency;
         if (updates.weight !== undefined) state.unitEconomics.weight = updates.weight;
         if (updates.dimensions !== undefined) state.unitEconomics.dimensions = updates.dimensions;
       }),
