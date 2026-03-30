@@ -55,7 +55,7 @@ export function ValueChainForm() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showFreightOverride, setShowFreightOverride] = useState(false);
 
-  const { register, watch, setValue, control } = useForm<ValueChainInputs>({
+  const { register, watch, setValue, control, reset } = useForm<ValueChainInputs>({
     defaultValues: valueChain,
   });
 
@@ -77,9 +77,22 @@ export function ValueChainForm() {
   const dimW = Number(useWatch({ control, name: "dimensions.width" })) || 0;
   const dimH = Number(useWatch({ control, name: "dimensions.height" })) || 0;
 
-  // Sync form → store (debounced)
+  // Sync store → form: reset RHF whenever Zustand valueChain changes so
+  // useWatch always reads from the current store state, not stale defaults.
   useEffect(() => {
-    const t = setTimeout(() => setValueChain(formValues), 120);
+    reset(valueChain);
+  }, [valueChain, reset]);
+
+  // Sync form → store (debounced, guarded).
+  // The guard prevents a feedback loop: reset(valueChain) → formValues changes →
+  // setValueChain fires → valueChain changes → reset fires again.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setValueChain((prev: typeof valueChain) => {
+        if (JSON.stringify(prev) === JSON.stringify(formValues)) return prev;
+        return formValues;
+      });
+    }, 120);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(formValues)]);
