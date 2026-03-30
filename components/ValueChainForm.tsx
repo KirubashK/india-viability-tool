@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
 import { ValueChainInputs, CostType, Currency } from "@/types/product";
@@ -70,8 +70,6 @@ export function ValueChainForm() {
   const watchedExchangeRate = watch("exchangeRate");
 
   // Derive dimension values from formValues (the global watch() subscription).
-  // watch("dimensions.length") etc. can lag on nested path changes in RHF — the
-  // global formValues subscription is always consistent with what the user typed.
   const dimL = Number(formValues.dimensions?.length) || 0;
   const dimW = Number(formValues.dimensions?.width) || 0;
   const dimH = Number(formValues.dimensions?.height) || 0;
@@ -98,24 +96,25 @@ export function ValueChainForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueChain.countryOfOrigin]);
 
-  // Auto-computed freight from engine
-  const freightPreview = useMemo(() => {
-    // Build dims from values derived from formValues — always current with typed input.
+  // Compute freight preview directly — no useMemo.
+  // watch() already re-renders the component on every keystroke, so this always
+  // runs with the latest typed values. Memoization here caused stale dims.
+  const freightPreview = (() => {
     const dims = { length: dimL, width: dimW, height: dimH };
-    const w = Number(watchedWeight) || 0.3;
+    const w = Number(formValues.weight) || 0.3;
     const usdRate = watchedCurrency === "USD"
       ? (watchedExchangeRate || EXCHANGE_RATES["USD"] || 83.5)
       : (EXCHANGE_RATES["USD"] || 83.5);
     return getImportFreightPerUnit(
-      watchedMode ?? "AIR",
-      watchedSeaType ?? "FCL",
+      (formValues.freightMode ?? "AIR"),
+      (formValues.seaShippingType ?? "FCL"),
       watchedCountry ?? "USA",
       w,
       dims,
       usdRate,
-      undefined // no override — preview only
+      undefined
     );
-  }, [watchedMode, watchedSeaType, watchedCountry, watchedWeight, dimL, dimW, dimH, watchedCurrency, watchedExchangeRate]);
+  })();
 
   const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
   // Use the actual watched exchange rate (user-editable), not the static table.
