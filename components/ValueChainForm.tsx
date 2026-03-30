@@ -79,19 +79,22 @@ export function ValueChainForm() {
 
   // Sync store → form: reset RHF whenever Zustand valueChain changes so
   // useWatch always reads from the current store state, not stale defaults.
+  // Stamp lastSyncedRef so the form→store effect skips the echo of this reset.
   useEffect(() => {
+    lastSyncedRef.current = JSON.stringify(valueChain);
     reset(valueChain);
   }, [valueChain, reset]);
 
-  // Sync form → store (debounced, guarded).
-  // The guard prevents a feedback loop: reset(valueChain) → formValues changes →
-  // setValueChain fires → valueChain changes → reset fires again.
+  // Sync form → store (debounced).
+  // Use a ref to track what we last wrote so we can skip writes triggered
+  // by the store→form reset() call (which would otherwise cause an infinite loop).
+  const lastSyncedRef = React.useRef<string>("");
   useEffect(() => {
+    const serialized = JSON.stringify(formValues);
     const t = setTimeout(() => {
-      setValueChain((prev: typeof valueChain) => {
-        if (JSON.stringify(prev) === JSON.stringify(formValues)) return prev;
-        return formValues;
-      });
+      if (lastSyncedRef.current === serialized) return; // came from reset(), skip
+      lastSyncedRef.current = serialized;
+      setValueChain(formValues);
     }, 120);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
