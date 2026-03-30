@@ -45,11 +45,17 @@ function buildWaterfallData(breakdown: CostBreakdownItem[]): WaterfallDataPoint[
     const isSubtotal = !!item.isSubtotal;
 
     if (isTotal || isSubtotal) {
+      // For negative totals (e.g. net profit when loss-making), the bar must render
+      // BELOW the x-axis. Set base to rawValue so the bar spans from rawValue up to 0.
+      // For positive totals, base=0 and bar spans from 0 up to rawValue (unchanged).
+      const negativeTotal = rawValue < 0;
       const result: WaterfallDataPoint = {
         name: item.label,
         value: Math.abs(rawValue),
-        base: 0,
-        fill: isTotal ? "#1e293b" : "#475569",
+        base: negativeTotal ? rawValue : 0,
+        fill: isTotal
+          ? (rawValue < 0 ? "#ef4444" : "#1e293b")  // red total if negative
+          : "#475569",
         isTotal,
         isSubtotal,
         displayValue: rawValue,

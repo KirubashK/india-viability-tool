@@ -318,6 +318,61 @@ export function ValueChainForm() {
           </span>
         </div>
 
+        {/* Always-visible dimension-sensitive metrics — update live as user types */}
+        <div className="grid grid-cols-3 gap-1.5">
+          {watchedMode === "AIR" && (
+            <>
+              <div className="bg-white rounded-lg p-2 text-xs text-center">
+                <p className="text-slate-400">Vol. wt (÷5000)</p>
+                <p className="font-semibold text-slate-700">
+                  {(freightPreview.volumetricWeight ?? 0).toFixed(3)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-2 text-xs text-center">
+                <p className="text-slate-400">Chargeable wt</p>
+                <p className="font-semibold text-slate-700">
+                  {(freightPreview.chargeableWeight ?? 0).toFixed(1)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-2 text-xs text-center">
+                <p className="text-slate-400">Slab rate</p>
+                <p className="font-semibold text-slate-700">₹{freightPreview.ratePerKg ?? 0}/kg</p>
+              </div>
+            </>
+          )}
+          {watchedMode === "SEA" && (
+            <>
+              <div className="bg-white rounded-lg p-2 text-xs text-center">
+                <p className="text-slate-400">Vol. wt (÷6000)</p>
+                <p className="font-semibold text-slate-700">
+                  {(freightPreview.seaVolumetricWeight ?? 0).toFixed(3)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-2 text-xs text-center">
+                <p className="text-slate-400">Chargeable wt</p>
+                <p className="font-semibold text-slate-700">
+                  {(freightPreview.seaChargeableWeight ?? 0).toFixed(3)} kg
+                </p>
+              </div>
+              {(watchedSeaType ?? "FCL") === "FCL" ? (
+                <div className="bg-white rounded-lg p-2 text-xs text-center">
+                  <p className="text-slate-400">Units / FCL</p>
+                  <p className="font-semibold text-slate-700">
+                    {(freightPreview.unitsPerContainer ?? 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg p-2 text-xs text-center">
+                  <p className="text-slate-400">Unit vol (CBM)</p>
+                  <p className="font-semibold text-slate-700">
+                    {(freightPreview.lclUnitVolumeCbm ?? 0).toFixed(5)}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* Advanced toggle */}
         <button
           type="button"

@@ -44,9 +44,26 @@ export function UnitEconomicsForm() {
 
   const watchedMarketplace = watch("marketplace");
   const watchedCategory = watch("category");
+  const watchedCommOverride = watch("commissionOverride");
+  const watchedPaymentOverride = watch("paymentFeeOverride");
+  const watchedClosingOverride = watch("closingFeeOverride");
+
   const autoFees = watchedMarketplace && watchedCategory
     ? getMarketplaceFees(watchedMarketplace, watchedCategory)
     : null;
+
+  // Compute effective display values — reflect overrides in the summary cards
+  // so what the user sees matches what the calculation uses.
+  const effectivePaymentFeePercent = (watchedPaymentOverride !== undefined && !isNaN(watchedPaymentOverride as number))
+    ? (watchedPaymentOverride as number)
+    : autoFees?.paymentFeePercent ?? 0;
+  const effectiveClosingFee = (watchedClosingOverride !== undefined && !isNaN(watchedClosingOverride as number))
+    ? (watchedClosingOverride as number)
+    : autoFees?.closingFee ?? 0;
+  const effectiveCommissionPercent = (watchedCommOverride !== undefined && !isNaN(watchedCommOverride as number))
+    ? (watchedCommOverride as number)
+    : autoFees?.commissionPercent ?? 0;
+  const effectiveTotalFeePercent = effectiveCommissionPercent + effectivePaymentFeePercent;
 
   const allValues = watch();
   useEffect(() => {
@@ -243,9 +260,9 @@ export function UnitEconomicsForm() {
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {[
-              { label: "Payment Fee", value: `${autoFees.paymentFeePercent}%` },
-              { label: "Closing Fee", value: `₹${autoFees.closingFee}` },
-              { label: "Total Fees", value: `${autoFees.totalFeePercent.toFixed(1)}%` },
+              { label: "Payment Fee", value: `${effectivePaymentFeePercent.toFixed(1)}%` },
+              { label: "Closing Fee", value: `₹${effectiveClosingFee}` },
+              { label: "Total Fees", value: `${effectiveTotalFeePercent.toFixed(1)}%` },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-lg bg-white p-2 text-xs">
                 <p className="text-slate-400">{label}</p>

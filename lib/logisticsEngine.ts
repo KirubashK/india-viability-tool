@@ -138,7 +138,7 @@ export function getImportFreightPerUnit(
     freightPerUnit, mode: "AIR",
     volumetricWeight, chargeableWeight, ratePerKg: slabRate,
     isOverridden: false,
-    tooltip: `AIR: ${chargeableWeight.toFixed(1)} kg (rounded) × ₹${slabRate}/kg slab`,
+    tooltip: `AIR: chargeable = max(actual ${weight.toFixed(2)} kg, vol ${volumetricWeight.toFixed(3)} kg) = ${chargeableWeight.toFixed(1)} kg → ₹${slabRate}/kg slab`,
   };
 }
 

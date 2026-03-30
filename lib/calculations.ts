@@ -323,7 +323,7 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
     { label: "Closing Fee", value: -closingFee },
     { label: `Payment Gateway (${effectiveCommission.paymentFeePercent}%)`, value: -paymentFeeAmount },
     { label: "Landed Cost", value: -landedCost },
-    { label: "Last-Mile Logistics", value: -logistics.forwardCost },
+    { label: "Last-Mile Logistics", value: -forwardLastMile },
     { label: `Return Logistics (${returnRate}% return rate)`, value: -logistics.returnCost },
     { label: `Marketing (${marketingPercent}%)`, value: -marketingCost },
     { label: "Net Profit", value: core.netProfit, isTotal: true },
