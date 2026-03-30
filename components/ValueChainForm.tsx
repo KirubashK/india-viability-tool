@@ -67,13 +67,14 @@ export function ValueChainForm() {
   const watchedSeaType = watch("seaShippingType");
   const watchedCostType = watch("costType");
   const watchedWeight = watch("weight");
-  // Watch individual dimension primitives so useMemo reacts to each field change.
-  // Watching the parent object "dimensions" may return a stable reference when only
-  // a nested field changes, silently preventing freight recalculation.
-  const watchedDimL = watch("dimensions.length");
-  const watchedDimW = watch("dimensions.width");
-  const watchedDimH = watch("dimensions.height");
   const watchedExchangeRate = watch("exchangeRate");
+
+  // Derive dimension values from formValues (the global watch() subscription).
+  // watch("dimensions.length") etc. can lag on nested path changes in RHF — the
+  // global formValues subscription is always consistent with what the user typed.
+  const dimL = Number(formValues.dimensions?.length) || 0;
+  const dimW = Number(formValues.dimensions?.width) || 0;
+  const dimH = Number(formValues.dimensions?.height) || 0;
 
   // Sync form → store (debounced)
   useEffect(() => {
@@ -99,17 +100,9 @@ export function ValueChainForm() {
 
   // Auto-computed freight from engine
   const freightPreview = useMemo(() => {
-    // Build dims directly from the watched primitives — these are the SAME values
-    // that are in the dependency array, guaranteeing no stale reference.
-    // Using watchedDims (parent object) inside the body while primitives are
-    // in deps can cause stale values if RHF returns the same object reference.
-    const dims = {
-      length: Number(watchedDimL) || 0,
-      width: Number(watchedDimW) || 0,
-      height: Number(watchedDimH) || 0,
-    };
+    // Build dims from values derived from formValues — always current with typed input.
+    const dims = { length: dimL, width: dimW, height: dimH };
     const w = Number(watchedWeight) || 0.3;
-    // Container/LCL costs are in USD — use USD→INR rate for preview.
     const usdRate = watchedCurrency === "USD"
       ? (watchedExchangeRate || EXCHANGE_RATES["USD"] || 83.5)
       : (EXCHANGE_RATES["USD"] || 83.5);
@@ -122,7 +115,7 @@ export function ValueChainForm() {
       usdRate,
       undefined // no override — preview only
     );
-  }, [watchedMode, watchedSeaType, watchedCountry, watchedWeight, watchedDimL, watchedDimW, watchedDimH, watchedCurrency, watchedExchangeRate]);
+  }, [watchedMode, watchedSeaType, watchedCountry, watchedWeight, dimL, dimW, dimH, watchedCurrency, watchedExchangeRate]);
 
   const autoRates = getDutyRates(watchedHs ?? "3304", watchedCountry ?? "USA");
   // Use the actual watched exchange rate (user-editable), not the static table.
