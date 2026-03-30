@@ -343,9 +343,9 @@ export function ValueChainForm() {
           {watchedMode === "SEA" && (
             <>
               <div className="bg-white rounded-lg p-2 text-xs text-center">
-                <p className="text-slate-400">Vol. wt (÷6000)</p>
+                <p className="text-slate-400">Unit vol (CBM)</p>
                 <p className="font-semibold text-slate-700">
-                  {(freightPreview.seaVolumetricWeight ?? 0).toFixed(3)} kg
+                  {(freightPreview.lclUnitVolumeCbm ?? 0).toFixed(4)}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-2 text-xs text-center">
@@ -388,8 +388,8 @@ export function ValueChainForm() {
             {watchedMode === "SEA" && (
               <>
                 <div className="bg-white rounded-lg p-2 text-xs">
-                  <p className="text-slate-400">Vol. weight (÷6000)</p>
-                  <p className="font-semibold text-slate-700">{(freightPreview.seaVolumetricWeight ?? 0).toFixed(3)} kg</p>
+                  <p className="text-slate-400">Unit volume (CBM)</p>
+                  <p className="font-semibold text-slate-700">{(freightPreview.lclUnitVolumeCbm ?? 0).toFixed(4)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-2 text-xs">
                   <p className="text-slate-400">Chargeable weight</p>

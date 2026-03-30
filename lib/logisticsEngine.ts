@@ -14,7 +14,7 @@ const SEA_CONTAINER_COSTS_USD: Record<string, number> = {
   RUS: 3800,
 };
 const DEFAULT_SEA_COST_USD = 3000;
-const CONTAINER_VOLUME_CM3 = 33_000_000; // 33 CBM usable
+const FCL_USABLE_VOLUME_CBM = 29; // safe usable capacity of a 20ft container (CBM)
 const PORT_CLEARANCE_INR = 20000;
 
 // ── LCL: cost per CBM in USD ──
@@ -88,9 +88,10 @@ export function getImportFreightPerUnit(
 
   // ── SEA ──────────────────────────────────────────────────────────────────────
   if (mode === "SEA") {
-    const unitVolumeCm3 = dims.length * dims.width * dims.height;
-    const unitsPerContainer = unitVolumeCm3 > 0
-      ? Math.floor(CONTAINER_VOLUME_CM3 / unitVolumeCm3)
+    // Volume in CBM (cubic meters) — correct unit for sea freight calculations
+    const volumeCBM = (dims.length * dims.width * dims.height) / 1_000_000;
+    const unitsPerContainer = volumeCBM > 0
+      ? Math.floor(FCL_USABLE_VOLUME_CBM / volumeCBM)
       : 0;
     const seaVolumetricWeight = getSeaVolumetricWeight(dims);
     const seaChargeableWeight = Math.max(weight, seaVolumetricWeight);
@@ -107,13 +108,14 @@ export function getImportFreightPerUnit(
         freightPerUnit, mode: "SEA", seaShippingType: "FCL",
         seaVolumetricWeight, seaChargeableWeight,
         unitsPerContainer, containerCost: containerCostInr, portClearancePerUnit,
+        lclUnitVolumeCbm: volumeCBM, // reuse field to surface unit CBM for UI
         isOverridden: false,
-        tooltip: `FCL: ₹${Math.round(containerCostInr).toLocaleString("en-IN")} ÷ ${unitsPerContainer} units`,
+        tooltip: `FCL: ${volumeCBM.toFixed(4)} CBM/unit → ${unitsPerContainer} units in ${FCL_USABLE_VOLUME_CBM} CBM container`,
       };
     }
 
     // LCL: cost per CBM, minimum charge applies
-    const lclUnitVolumeCbm = unitVolumeCm3 / 1_000_000;
+    const lclUnitVolumeCbm = volumeCBM;
     const lclFreightUSD = Math.max(lclUnitVolumeCbm * LCL_COST_PER_CBM_USD, LCL_MIN_CHARGE_USD);
     const freightPerUnit = lclFreightUSD * usdToInrRate;
     return {
