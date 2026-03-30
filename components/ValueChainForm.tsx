@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useProductStore } from "@/store/productStore";
 import { ValueChainInputs, CostType, Currency } from "@/types/product";
 import { getDutyRates } from "@/lib/dutyEngine";
@@ -55,7 +55,7 @@ export function ValueChainForm() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showFreightOverride, setShowFreightOverride] = useState(false);
 
-  const { register, watch, setValue } = useForm<ValueChainInputs>({
+  const { register, watch, setValue, control } = useForm<ValueChainInputs>({
     defaultValues: valueChain,
   });
 
@@ -69,10 +69,13 @@ export function ValueChainForm() {
   const watchedWeight = watch("weight");
   const watchedExchangeRate = watch("exchangeRate");
 
-  // Derive dimension values from formValues (the global watch() subscription).
-  const dimL = Number(formValues.dimensions?.length) || 0;
-  const dimW = Number(formValues.dimensions?.width) || 0;
-  const dimH = Number(formValues.dimensions?.height) || 0;
+  // useWatch subscribes directly to RHF's internal field registry per path.
+  // Unlike watch(), it reliably returns updated values for nested dot-notation
+  // fields (e.g. "dimensions.length") even when the parent object reference
+  // is unchanged — which is exactly the case that was causing stale dims.
+  const dimL = Number(useWatch({ control, name: "dimensions.length" })) || 0;
+  const dimW = Number(useWatch({ control, name: "dimensions.width" })) || 0;
+  const dimH = Number(useWatch({ control, name: "dimensions.height" })) || 0;
 
   // Sync form → store (debounced)
   useEffect(() => {
@@ -98,10 +101,10 @@ export function ValueChainForm() {
 
   // Compute freight preview directly — no useMemo.
   // watch() already re-renders the component on every keystroke, so this always
-  // runs with the latest typed values. Memoization here caused stale dims.
+  // runs with the latest typed values. dimL/W/H come from useWatch (reliable).
   const freightPreview = (() => {
     const dims = { length: dimL, width: dimW, height: dimH };
-    const w = Number(formValues.weight) || 0.3;
+    const w = Number(watchedWeight) || 0.3;
     const usdRate = watchedCurrency === "USD"
       ? (watchedExchangeRate || EXCHANGE_RATES["USD"] || 83.5)
       : (EXCHANGE_RATES["USD"] || 83.5);
