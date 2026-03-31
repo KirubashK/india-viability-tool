@@ -62,7 +62,9 @@ export default function ProductAnalysisPage() {
     const marginLandedCost = includeGstInLandedCost
       ? landedCostResult.totalLandedCost
       : (landedCostResult.landedCostExclGst ?? landedCostResult.totalLandedCost);
-    const ueInputs = { ...unitEconomics, landedCost: marginLandedCost };
+    const hasIgstOverride = valueChain.igstOverride !== undefined && !isNaN(valueChain.igstOverride);
+    const outputGstPercent = hasIgstOverride ? valueChain.igstOverride! : undefined;
+    const ueInputs = { ...unitEconomics, landedCost: marginLandedCost, ...(outputGstPercent !== undefined && { outputGstPercent }) };
     const unitEcon = calculateUnitEconomics(ueInputs);
     const effectiveSellingPrice = unitEcon.sellingPrice > 0 ? unitEcon.sellingPrice : 0;
     const market = competitorPrices.length > 0
@@ -78,17 +80,15 @@ export default function ProductAnalysisPage() {
     setTimeout(() => {
       try {
         const landed = calculateLandedCost(valueChain);
-        // IGST toggle: when false (default) use landedCostExclGst — IGST is recoverable
-        // via ITC on marketplace sales so it shouldn't reduce the margin.
-        // When true, include IGST in landed cost (correct for non-ITC scenarios).
+        // Derive effective output GST rate: if user overrode IGST in ValueChain,
+        // that rate applies to the product's GST on sales too (same rate in India).
+        const hasIgstOverride = valueChain.igstOverride !== undefined && !isNaN(valueChain.igstOverride);
+        const outputGstPercent = hasIgstOverride ? valueChain.igstOverride! : undefined;
         const marginLandedCost = includeGstInLandedCost
           ? landed.totalLandedCost
           : (landed.landedCostExclGst ?? landed.totalLandedCost);
-        const ueInputs = { ...unitEconomics, landedCost: marginLandedCost };
+        const ueInputs = { ...unitEconomics, landedCost: marginLandedCost, ...(outputGstPercent !== undefined && { outputGstPercent }) };
         const unitEcon = calculateUnitEconomics(ueInputs);
-        // Use ONLY the resolved price from unitEcon — never fall back to the stale
-        // product.sellingPrice. If RECOMMEND mode failed (sellingPrice=0), market
-        // position receives 0 and returns safe neutral outputs.
         const effectiveSellingPrice = unitEcon.sellingPrice > 0 ? unitEcon.sellingPrice : 0;
         const market = competitorPrices.length > 0
           ? calculateMarketPosition({ sellingPrice: effectiveSellingPrice, competitorPrices })

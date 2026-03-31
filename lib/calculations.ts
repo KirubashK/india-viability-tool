@@ -206,7 +206,9 @@ function deriveSellingPrice(
 export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomicsResult {
   const { marketplace, category, weight, landedCost, marketingPercent, returnRate } = inputs;
 
-  const gstRate = getOutputGstRate(category);
+  const gstRate = inputs.outputGstPercent !== undefined && !isNaN(inputs.outputGstPercent)
+    ? inputs.outputGstPercent
+    : getOutputGstRate(category);
 
   const fees = getMarketplaceFees(marketplace, category);
 
@@ -317,7 +319,7 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
 
   const breakdown: CostBreakdownItem[] = [
     { label: "MRP / Selling Price", value: sellingPrice },
-    { label: `GST Deducted (${category === "FOOD" ? "5" : category === "APPAREL" ? "12" : "18"}%)`, value: -gstAmount },
+    { label: `GST Deducted (${gstRate}%)`, value: -gstAmount },
     { label: "Net Revenue (ex-GST)", value: netRevenuePre, isSubtotal: true },
     { label: `Marketplace Commission (${effectiveCommission.commissionPercent}%)`, value: -commissionAmount },
     { label: "Closing Fee", value: -closingFee },

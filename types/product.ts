@@ -76,6 +76,9 @@ export interface UnitEconomicsInputs {
   paymentFeeOverride?: number;  // overrides marketplace default payment fee %
   closingFeeOverride?: number;  // overrides marketplace default closing fee (INR)
   logisticsOverride?: number;   // overrides forward last-mile cost only; return cost always added
+  // When set, overrides the category-based output GST rate (e.g. when IGST override is set
+  // in ValueChain, the product's GST rate should match — they're the same rate in India).
+  outputGstPercent?: number;
 }
 
 export interface MarketInputs {
