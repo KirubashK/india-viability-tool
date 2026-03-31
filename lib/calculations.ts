@@ -282,7 +282,10 @@ export function calculateUnitEconomics(inputs: UnitEconomicsInputs): UnitEconomi
   }
 
   // ── P&L from resolved sellingPrice ─────────────────────────────────────────
-  const { basePrice: netRevenuePre, gstAmount } = deconstructGst(sellingPrice, category);
+  // Compute GST using gstRate (which respects outputGstPercent override) rather
+  // than calling deconstructGst(category) which always uses the category default.
+  const netRevenuePre = sellingPrice / (1 + gstRate / 100);
+  const gstAmount = sellingPrice - netRevenuePre;
 
   const { commissionAmount, closingFee, paymentFeeAmount, totalDeduction, netAfterFees } =
     calculateMarketplaceDeduction(netRevenuePre, effectiveCommission);
